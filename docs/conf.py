@@ -82,9 +82,9 @@ linkcheck_ignore = [
     r"http://127\.0\.0\.1.*",
     # Anchors on GitHub are generated client-side.
     r"https://github\.com/.*#.*",
-    # The repository is not published yet.
-    r"https://github\.com/plone/plone-client.*",
-    r"https://plone\.github\.io/plone-client.*",
+    # npm answers automated clients with 403.
+    r"https://www\.npmjs\.com/.*",
+    # The package is not on PyPI yet.
     r"https://pypi\.org/project/plone-client.*",
 ]
 

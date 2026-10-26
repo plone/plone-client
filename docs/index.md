@@ -9,7 +9,7 @@ myst:
 
 # plone-client
 
-plone-client is a Python library and a command line client for [Plone](https://plone.org) sites, built on [`plone.restapi`](https://6.docs.plone.org/plone.restapi/).
+plone-client is a Python library and a command line client for [Plone](https://plone.org) sites, built on [`plone.restapi`](https://6.docs.plone.org/plone.restapi/docs/source/index.html).
 
 As a library, it gives your code a client with one manager per REST API service.
 Use it to sync content from an external source, to migrate content, or to automate site maintenance.

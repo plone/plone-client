@@ -11,7 +11,7 @@ myst:
 
 # Compatibility
 
-plone-client talks to a site only through [`plone.restapi`](https://6.docs.plone.org/plone.restapi/).
+plone-client talks to a site only through [`plone.restapi`](https://6.docs.plone.org/plone.restapi/docs/source/index.html).
 What a site supports depends on the `plone.restapi` version it runs, not on plone-client.
 
 ## Plone and `plone.restapi` versions
