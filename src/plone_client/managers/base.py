@@ -1,33 +1,37 @@
-"""Base class for all resource managers."""
+"""Base class of the managers."""
 
-from __future__ import annotations
+from typing import TYPE_CHECKING
 
-from ..connection import PloneConnection
-from typing import Any
+
+if TYPE_CHECKING:
+    from ..client import PloneClient
 
 
 class BaseManager:
+    """Group the calls to one area of ``plone.restapi``.
+
+    A manager holds no state of its own: every call goes through the
+    :class:`~plone_client.PloneClient` it belongs to.
+
+    :param client: The client.
     """
-    All resource managers extend this class.
 
-    :param connection: The shared :class:`~plone_client.connection.PloneConnection`.
-    :type connection: PloneConnection
-    """
+    def __init__(self, client: "PloneClient") -> None:
+        self._client = client
 
-    def __init__(self, connection: PloneConnection) -> None:
-        self._conn = connection
+    def _resolve(self, ref: str) -> str:
+        """Site path for a path, URL, ``uid:<UID>`` or ``resolveuid`` link.
 
-    def _get(self, path: str, **kwargs: Any) -> Any:
-        return self._conn.get(path, **kwargs).json()
+        :param ref: The reference.
+        :returns: The site path.
+        """
+        return self._client.content.resolve(ref)
 
-    def _post(self, path: str, **kwargs: Any) -> Any:
-        return self._conn.post(path, **kwargs).json()
+    def _service(self, ref: str, service: str) -> str:
+        """Path of a service on an item.
 
-    def _patch(self, path: str, **kwargs: Any) -> Any:
-        return self._conn.patch(path, **kwargs).json()
-
-    def _put(self, path: str, **kwargs: Any) -> Any:
-        return self._conn.put(path, **kwargs).json()
-
-    def _delete(self, path: str, **kwargs: Any) -> None:
-        self._conn.delete(path, **kwargs)
+        :param ref: Path, URL or UID reference of the item.
+        :param service: Service name with its arguments (``@workflow/publish``).
+        :returns: Site path of the service.
+        """
+        return f"{self._resolve(ref).rstrip('/')}/{service}"

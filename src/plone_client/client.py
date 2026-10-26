@@ -1,251 +1,612 @@
-"""
-Main entry point for plone-client.
+"""The :class:`PloneClient`: one site, one HTTP session, every service.
 
-Example usage::
+Example::
 
     from plone_client import PloneClient
 
-    client = PloneClient(
-        base_url="https://my.plone.site",
-        username="admin",
-        password="secret",
-    )
-
-    with client:
-        doc = client.content.create("/", "Document", title="Hello World")
-        results = client.search.search({"portal_type": "Document"})
+    with PloneClient("https://example.org", username="admin", password="pw") as site:
+        page = site.content.get("/about")
+        for item in site.search.iter(portal_type="News Item", review_state="published"):
+            print(item["@id"])
 """
 
-from __future__ import annotations
-
-from .config import PloneClientConfig
-from .connection import PloneConnection
-from .logging_config import logger
-from .logging_config import setup_logging
+from .auth import AuthMethod
+from .auth import build_auth
+from .exceptions import error_from_response
+from .exceptions import PloneConnectionError
+from .exceptions import PloneReadOnlyError
+from .exceptions import PloneTimeoutError
 from .managers import AddonsManager
-from .managers import BlocksManager
+from .managers import AliasesManager
 from .managers import CommentsManager
 from .managers import ContentManager
+from .managers import ContentRulesManager
 from .managers import ControlpanelsManager
-from .managers import DatabaseManager
 from .managers import FilesManager
 from .managers import GroupsManager
 from .managers import HistoryManager
+from .managers import NavigationManager
+from .managers import QuerystringManager
 from .managers import RegistryManager
 from .managers import RelationsManager
 from .managers import SearchManager
 from .managers import SharingManager
-from .managers import SiteManager
-from .managers import TilesManager
+from .managers import SystemManager
+from .managers import TranslationsManager
+from .managers import TypesManager
 from .managers import UsersManager
-from .managers import UtilitiesManager
+from .managers import VocabulariesManager
+from .managers import WorkflowManager
 from .managers import WorkingCopyManager
-from requests import Response
+from collections.abc import Iterator
+from collections.abc import Mapping
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version
+from pathlib import Path
 from typing import Any
+from typing import Self
+from urllib.parse import parse_qsl
+from urllib.parse import urlsplit
+
+import httpx
+import logging
+import os
+import time
+
+
+logger = logging.getLogger("plone_client")
+
+try:
+    _VERSION = version("plone-client")
+except PackageNotFoundError:  # no cov
+    _VERSION = "unknown"
+
+USER_AGENT = f"plone-client/{_VERSION}"
+
+#: Methods that never change the site.
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+#: Methods that may be repeated without changing the outcome.
+IDEMPOTENT_METHODS = SAFE_METHODS | {"PUT", "DELETE"}
+#: Statuses worth retrying for idempotent methods.
+RETRY_STATUSES = frozenset({429, 502, 503, 504})
+#: Services that answer a ``POST`` without changing the site.
+READ_ONLY_POSTS = ("@querystring-search", "@login", "@login-renew")
+
+Params = Mapping[str, Any] | list[tuple[str, Any]] | None
+QueryPairs = list[tuple[str, str | int | float | bool | None]]
+
+
+def encode_params(params: Params) -> QueryPairs:
+    """Encode query parameters the way ``plone.restapi`` reads them.
+
+    * ``None`` values are dropped;
+    * booleans become ``true`` / ``false``;
+    * lists and tuples become repeated keys
+      (``portal_type=Document&portal_type=News Item``);
+    * nested mappings are flattened with dots, which is how catalog query
+      options are written (``{"path": {"query": "/news", "depth": 1}}``
+      becomes ``path.query=/news&path.depth=1``).
+
+    :param params: Parameters as a mapping or as a list of pairs.
+    :returns: Encoded key/value pairs.
+    """
+    if not params:
+        return []
+    pairs = params.items() if isinstance(params, Mapping) else params
+    encoded: QueryPairs = []
+    for key, value in pairs:
+        if value is None:
+            continue
+        if isinstance(value, Mapping):
+            encoded.extend(
+                encode_params([(f"{key}.{sub}", val) for sub, val in value.items()])
+            )
+        elif isinstance(value, list | tuple | set | frozenset):
+            encoded.extend((key, _scalar(item)) for item in value)
+        else:
+            encoded.append((key, _scalar(value)))
+    return encoded
+
+
+def _scalar(value: Any) -> str:
+    """Encode one query parameter value.
+
+    :param value: The value.
+    :returns: Its string form.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _parse_retry_after(response: httpx.Response) -> float:
+    """Seconds to wait according to ``Retry-After``.
+
+    :param response: The response.
+    :returns: Seconds, or ``0.0`` when the header is missing or is a date.
+    """
+    try:
+        return max(0.0, float(response.headers.get("Retry-After", "")))
+    except ValueError:
+        return 0.0
 
 
 class PloneClient:
-    """
-    High-level client for interacting with a Plone site via plone.restapi.
+    """Client for one Plone site, through ``plone.restapi``.
 
-    All configuration can be passed explicitly or via environment variables
-    (see :class:`~plone_client.config.PloneClientConfig`).
+    Paths given to the client and its managers can be written as site paths
+    (``/news/item``), as absolute URLs of the site (the ``@id`` values the
+    API returns) or as API URLs (with ``++api++``). They are all mapped to
+    the same API URL.
 
-    :param base_url: Root URL of the Plone site, e.g. ``"https://my.plone.site"``.
-        Falls back to ``PLONE_CLIENT_BASE_URL`` env var.
-    :type base_url: str
-    :param username: Plone username.  Falls back to ``PLONE_CLIENT_USERNAME``.
-    :type username: str
-    :param password: Plone password.  Falls back to ``PLONE_CLIENT_PASSWORD``.
-    :type password: str
-    :param token: Pre-issued JWT bearer token.  Falls back to ``PLONE_CLIENT_TOKEN``.
-    :type token: str
-    :param config: Pass a fully-built :class:`~plone_client.config.PloneClientConfig`
-        to override individual settings at construction time.
-    :type config: PloneClientConfig or None
-    :param config_kwargs: Any other keyword argument accepted by
-        :class:`~plone_client.config.PloneClientConfig`.
-
-    >>> client = PloneClient(
-    ...     "https://my.plone.site", username="admin", password="secret"
-    ... )
-    >>> client.open()
-    >>> page = client.content.get("/front-page")
-    >>> client.close()
-
-    Using as context manager (recommended)::
-
-        with PloneClient(...) as client:
-            page = client.content.get("/front-page")
+    :param url: URL of the site root, such as ``https://example.org`` or
+        ``http://localhost:8080/Plone``.
+    :param username: Login name.
+    :param password: Password.
+    :param token: JWT issued beforehand; used instead of the username and
+        password.
+    :param auth_method: ``basic`` (default) sends the username and password
+        on every request; ``jwt`` logs in with ``@login`` and sends the token.
+    :param auth: Any :class:`httpx.Auth`; overrides the credentials above.
+    :param api_prefix: Traversal prefix of the REST API. ``++api++`` works
+        with and without a Volto frontend in front of the backend; use an
+        empty string to rely on the ``Accept`` header only.
+    :param timeout: Seconds to wait for the site.
+    :param verify: Verify TLS certificates.
+    :param retries: Times a request is repeated after a network error, or
+        after a ``429``/``502``/``503``/``504`` answer to an idempotent method.
+    :param backoff: Base delay in seconds between retries; doubles each time.
+    :param headers: Extra headers sent with every request.
+    :param read_only: Refuse every request that could change the site.
+    :param dry_run: Do not send requests that could change the site; log them
+        and return a description of what would have been sent instead.
+    :param transport: Custom :mod:`httpx` transport, mostly for tests.
     """
 
     def __init__(
         self,
-        base_url: str = "",
+        url: str,
         *,
         username: str = "",
         password: str = "",
         token: str = "",
-        config: PloneClientConfig | None = None,
-        **config_kwargs: Any,
+        auth_method: AuthMethod = "basic",
+        auth: httpx.Auth | None = None,
+        api_prefix: str = "++api++",
+        timeout: float = 30.0,
+        verify: bool = True,
+        retries: int = 3,
+        backoff: float = 0.5,
+        headers: Mapping[str, str] | None = None,
+        read_only: bool = False,
+        dry_run: bool = False,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
-        if config is not None:
-            self._config = config
-        else:
-            self._config = PloneClientConfig(
-                base_url=base_url or config_kwargs.pop("base_url", ""),
-                username=username or config_kwargs.pop("username", ""),
-                password=password or config_kwargs.pop("password", ""),
-                token=token or config_kwargs.pop("token", ""),
-                **config_kwargs,
+        if not url:
+            raise ValueError("The URL of the site is required")
+        self.url = url.rstrip("/")
+        self.api_prefix = api_prefix.strip("/")
+        self.retries = retries
+        self.backoff = backoff
+        self.read_only = read_only
+        self.dry_run = dry_run
+        #: Requests skipped because of ``dry_run``, oldest first.
+        self.dry_run_log: list[dict[str, Any]] = []
+        if auth is None:
+            auth = build_auth(
+                username=username,
+                password=password,
+                token=token,
+                method=auth_method,
+                login_url=self.api_url("/@login"),
             )
-
-        # Apply log level from config
-        setup_logging(level=self._config.log_level)
-
-        self._conn: PloneConnection = PloneConnection(self._config)
-        self._init_managers()
+        self.username = username
+        self._http = httpx.Client(
+            auth=auth,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": USER_AGENT,
+                **(headers or {}),
+            },
+            timeout=timeout,
+            verify=verify,
+            transport=transport or httpx.HTTPTransport(retries=retries, verify=verify),
+        )
+        self.content = ContentManager(self)
+        self.search = SearchManager(self)
+        self.querystring = QuerystringManager(self)
+        self.workflow = WorkflowManager(self)
+        self.files = FilesManager(self)
+        self.navigation = NavigationManager(self)
+        self.aliases = AliasesManager(self)
+        self.history = HistoryManager(self)
+        self.comments = CommentsManager(self)
+        self.translations = TranslationsManager(self)
+        self.working_copy = WorkingCopyManager(self)
+        self.relations = RelationsManager(self)
+        self.users = UsersManager(self)
+        self.groups = GroupsManager(self)
+        self.sharing = SharingManager(self)
+        self.types = TypesManager(self)
+        self.vocabularies = VocabulariesManager(self)
+        self.registry = RegistryManager(self)
+        self.controlpanels = ControlpanelsManager(self)
+        self.addons = AddonsManager(self)
+        self.content_rules = ContentRulesManager(self)
+        self.system = SystemManager(self)
 
     # ------------------------------------------------------------------
-    # Resource managers
+    # Alternative constructors
     # ------------------------------------------------------------------
 
-    def _init_managers(self) -> None:
-        self.content = ContentManager(self._conn)
-        self.search = SearchManager(self._conn)
-        self.users = UsersManager(self._conn)
-        self.groups = GroupsManager(self._conn)
-        self.sharing = SharingManager(self._conn)
-        self.registry = RegistryManager(self._conn)
-        self.controlpanels = ControlpanelsManager(self._conn)
-        self.addons = AddonsManager(self._conn)
-        self.site = SiteManager(self._conn)
-        self.comments = CommentsManager(self._conn)
-        self.history = HistoryManager(self._conn)
-        self.tiles = TilesManager(self._conn)
-        self.files = FilesManager(self._conn)
-        self.relations = RelationsManager(self._conn)
-        self.working_copy = WorkingCopyManager(self._conn)
-        self.blocks = BlocksManager(self._conn)
-        self.database = DatabaseManager(self._conn)
-        self.utilities = UtilitiesManager(self._conn)
+    @classmethod
+    def from_env(cls, prefix: str = "PLONE_CLIENT_", **overrides: Any) -> Self:
+        """Build a client from environment variables.
 
-    # ------------------------------------------------------------------
-    # Session lifecycle
-    # ------------------------------------------------------------------
+        Reads ``<prefix>URL``, ``<prefix>USERNAME``, ``<prefix>PASSWORD``,
+        ``<prefix>TOKEN``, ``<prefix>AUTH_METHOD``, ``<prefix>TIMEOUT``,
+        ``<prefix>VERIFY`` and ``<prefix>READ_ONLY``.
 
-    def open(self) -> None:
+        :param prefix: Prefix of the variable names.
+        :param overrides: Keyword arguments that win over the environment.
+        :returns: A configured client.
+        :raises PloneConfigurationError: If no URL is set.
         """
-        Open the client session.
+        from .profiles import settings_from_env
 
-        If credentials are configured (and no static token is set), this
-        performs a JWT login against ``/@login``.
+        settings = settings_from_env(os.environ, prefix=prefix)
+        return cls(**{**settings, **overrides})
+
+    @classmethod
+    def from_profile(
+        cls,
+        name: str = "",
+        *,
+        config_file: Path | None = None,
+        **overrides: Any,
+    ) -> Self:
+        """Build a client from a named profile.
+
+        Profiles live in the configuration file (see :mod:`plone_client.profiles`)
+        and their secrets in the operating system's keyring.
+
+        :param name: Profile name; empty selects the current profile.
+        :param config_file: Configuration file; defaults to the user's.
+        :param overrides: Keyword arguments that win over the profile.
+        :returns: A configured client.
+        :raises PloneConfigurationError: If the profile or its secret is missing.
         """
-        if not self._config.has_token and self._config.has_credentials:
-            self._conn.login()
-        logger.info("PloneClient opened for %s", self._config.base_url)
+        from .profiles import load_config
 
-    def close(self) -> None:
-        """Close the session and log out (if using JWT auth)."""
-        if not self._config.has_token:
-            self._conn.logout()
-        self._conn._session.close()
-        logger.info("PloneClient closed")
-
-    def __enter__(self) -> PloneClient:
-        self.open()
-        return self
-
-    def __exit__(self, *_: Any) -> None:
-        self.close()
+        config = load_config(config_file)
+        profile = config.get(name or config.current_name())
+        return cls(**{**profile.client_settings(), **overrides})
 
     # ------------------------------------------------------------------
-    # Escape hatch — call any custom service or endpoint
+    # URLs and paths
     # ------------------------------------------------------------------
+
+    @property
+    def api_root(self) -> str:
+        """Absolute URL of the API root."""
+        return f"{self.url}/{self.api_prefix}" if self.api_prefix else self.url
+
+    def path(self, ref: str) -> str:
+        """Site path for a path or a URL of the site.
+
+        :param ref: ``/news``, ``news``, ``https://example.org/news`` or
+            ``https://example.org/++api++/news``. A query string is dropped.
+        :returns: Path starting with ``/``, without a trailing slash
+            (``/`` for the site root).
+        :raises ValueError: If ``ref`` is a URL of another site.
+        """
+        ref = ref.strip()
+        if "://" in ref:
+            parts = urlsplit(ref)
+            url = f"{parts.scheme}://{parts.netloc}{parts.path}"
+            if url != self.url and not url.startswith(f"{self.url}/"):
+                raise ValueError(f"{ref} is not a URL of {self.url}")
+            ref = url[len(self.url) :]
+        else:
+            ref = ref.split("?", 1)[0]
+        segments = [segment for segment in ref.split("/") if segment]
+        if self.api_prefix and segments[:1] == [self.api_prefix]:
+            segments = segments[1:]
+        return "/" + "/".join(segments)
+
+    def api_url(self, ref: str) -> str:
+        """Absolute API URL for a path or a URL of the site.
+
+        :param ref: See :meth:`path`.
+        :returns: The URL the request is sent to.
+        """
+        path = self.path(ref)
+        return self.api_root if path == "/" else f"{self.api_root}{path}"
+
+    def site_url(self, ref: str) -> str:
+        """Absolute URL of the site, as the API writes it in ``@id``.
+
+        :param ref: See :meth:`path`.
+        :returns: The URL without ``++api++``.
+        """
+        path = self.path(ref)
+        return self.url if path == "/" else f"{self.url}{path}"
+
+    # ------------------------------------------------------------------
+    # Requests
+    # ------------------------------------------------------------------
+
+    def _changes_site(self, method: str, path: str) -> bool:
+        """Say whether a request could change the site.
+
+        :param method: HTTP method, upper case.
+        :param path: Site path of the request.
+        :returns: ``False`` for safe methods and read-only ``POST`` services.
+        """
+        if method in SAFE_METHODS:
+            return False
+        return not (method == "POST" and path.endswith(READ_ONLY_POSTS))
 
     def request(
         self,
         method: str,
-        path: str,
-        **kwargs: Any,
-    ) -> Response:
+        ref: str = "/",
+        *,
+        params: Params = None,
+        json: Any = None,
+        content: bytes | None = None,
+        headers: Mapping[str, str] | None = None,
+        raise_for_status: bool = True,
+        timeout: float | None = None,
+    ) -> httpx.Response:
+        """Send a request to the site.
+
+        This is the escape hatch for services the managers do not cover,
+        such as the ones added by add-ons.
+
+        :param method: HTTP method.
+        :param ref: Path or URL of the site, ``@`` services included
+            (``/news/@workflow/publish``).
+        :param params: Query parameters (see
+            :func:`~plone_client.client.encode_params`).
+        :param json: Body, serialized as JSON.
+        :param content: Raw body, instead of ``json``.
+        :param headers: Extra headers for this request.
+        :param raise_for_status: Raise
+            :class:`~plone_client.exceptions.PloneAPIError` for error answers.
+        :param timeout: Seconds to wait, instead of the client's timeout.
+        :returns: The response.
+        :raises PloneReadOnlyError: If the client is read-only and the request
+            could change the site.
+        :raises PloneAPIError: If the site answers with an error status.
+        :raises PloneConnectionError: If the site cannot be reached.
         """
-        Execute a raw HTTP request against the Plone site.
+        method = method.upper()
+        path = self.path(ref)
+        url = self.api_url(path)
+        if self._changes_site(method, path):
+            if self.read_only:
+                raise PloneReadOnlyError(
+                    f"{method} {path} refused: the client is read-only"
+                )
+            if self.dry_run:
+                return self._skip(method, url, params, json, content)
+        request = self._http.build_request(
+            method,
+            url,
+            params=encode_params(params),
+            json=json,
+            content=content,
+            headers=headers,
+            timeout=timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT,
+        )
+        response = self._send(request)
+        if raise_for_status and response.status_code >= 400:
+            raise error_from_response(response)
+        return response
 
-        This is the **escape hatch** for calling custom services,
-        add-on endpoints, or anything not yet covered by the built-in
-        managers.
+    def _send(self, request: httpx.Request) -> httpx.Response:
+        """Send a request, retrying when it is safe to do so.
 
-        :param method: HTTP verb: ``GET``, ``POST``, ``PATCH``, ``PUT``, ``DELETE``, …
-        :type method: str
-        :param path: Path relative to ``base_url``, e.g. ``"/@my-custom-service"``.
-            Absolute URLs are also accepted.
-        :type path: str
-        :param kwargs: Forwarded verbatim to :mod:`requests` (``json``, ``params``,
-            ``data``, ``headers``, ``files``, ``timeout``, …).
-        :returns: Raw response object — caller is responsible for parsing.
-        :rtype: requests.Response
+        Connection failures are retried by the transport. Here, idempotent
+        requests are retried when the site answers ``429``, ``502``, ``503``
+        or ``504``, honoring ``Retry-After``.
 
-        >>> response = client.request(
-        ...     "GET", "/@my-custom-endpoint", params={"key": "val"}
-        ... )
-        >>> data = response.json()
-
-        >>> # POST a custom service with a file upload
-        >>> with open("image.png", "rb") as f:
-        ...     r = client.request("POST", "/news/@@upload", files={"file": f})
+        :param request: The request.
+        :returns: The last response.
+        :raises PloneConnectionError: If the site cannot be reached.
         """
-        return self._conn._request(method.upper(), path, **kwargs)
+        attempts = self.retries + 1 if request.method in IDEMPOTENT_METHODS else 1
+        for attempt in range(attempts):
+            started = time.monotonic()
+            try:
+                response = self._http.send(request)
+            except httpx.TimeoutException as exc:
+                raise PloneTimeoutError(
+                    f"{request.method} {request.url}: timed out"
+                ) from exc
+            except httpx.TransportError as exc:
+                raise PloneConnectionError(
+                    f"{request.method} {request.url}: {exc}"
+                ) from exc
+            elapsed = (time.monotonic() - started) * 1000
+            logger.debug(
+                "%s %s -> %s (%.0f ms)",
+                request.method,
+                request.url,
+                response.status_code,
+                elapsed,
+            )
+            if response.status_code not in RETRY_STATUSES or attempt + 1 == attempts:
+                return response
+            wait = _parse_retry_after(response) or self.backoff * 2**attempt
+            logger.warning(
+                "%s %s answered %s; retrying in %.1fs",
+                request.method,
+                request.url,
+                response.status_code,
+                wait,
+            )
+            response.close()
+            time.sleep(wait)
+        raise AssertionError("unreachable")  # no cov
 
-    def get(self, path: str, **kwargs: Any) -> Response:
-        """Shorthand for ``client.request("GET", path, ...)``."""
-        return self._conn.get(path, **kwargs)
+    def _skip(
+        self,
+        method: str,
+        url: str,
+        params: Params,
+        json: Any,
+        content: bytes | None,
+    ) -> httpx.Response:
+        """Record a request instead of sending it.
 
-    def post(self, path: str, **kwargs: Any) -> Response:
-        """Shorthand for ``client.request("POST", path, ...)``."""
-        return self._conn.post(path, **kwargs)
+        :returns: A ``200`` response describing the skipped request.
+        """
+        entry: dict[str, Any] = {"dry_run": True, "method": method, "url": url}
+        if params:
+            entry["params"] = encode_params(params)
+        if json is not None:
+            entry["json"] = json
+        if content is not None:
+            entry["content_length"] = len(content)
+        self.dry_run_log.append(entry)
+        logger.info("Dry run: %s %s not sent", method, url)
+        return httpx.Response(200, json=entry, request=httpx.Request(method, url))
 
-    def patch(self, path: str, **kwargs: Any) -> Response:
-        """Shorthand for ``client.request("PATCH", path, ...)``."""
-        return self._conn.patch(path, **kwargs)
+    @staticmethod
+    def _json(response: httpx.Response) -> Any:
+        """Parsed body of a response.
 
-    def put(self, path: str, **kwargs: Any) -> Response:
-        """Shorthand for ``client.request("PUT", path, ...)``."""
-        return self._conn.put(path, **kwargs)
+        :param response: The response.
+        :returns: The JSON body, or ``None`` for an empty body.
+        """
+        if response.status_code == 204 or not response.content:
+            return None
+        return response.json()
 
-    def delete(self, path: str, **kwargs: Any) -> Response:
-        """Shorthand for ``client.request("DELETE", path, ...)``."""
-        return self._conn.delete(path, **kwargs)
+    def get(self, ref: str = "/", **params: Any) -> Any:
+        """``GET`` a path and return the JSON body.
+
+        :param ref: Path or URL of the site.
+        :param params: Query parameters.
+        :returns: The parsed body.
+        """
+        return self._json(self.request("GET", ref, params=params))
+
+    def post(self, ref: str, data: Any = None, **kwargs: Any) -> Any:
+        """``POST`` JSON to a path and return the JSON body.
+
+        :param ref: Path or URL of the site.
+        :param data: Body.
+        :param kwargs: Extra arguments for :meth:`request`.
+        :returns: The parsed body, or ``None``.
+        """
+        return self._json(self.request("POST", ref, json=data, **kwargs))
+
+    def patch(self, ref: str, data: Any = None, **kwargs: Any) -> Any:
+        """``PATCH`` a path with JSON and return the JSON body.
+
+        :param ref: Path or URL of the site.
+        :param data: Body.
+        :param kwargs: Extra arguments for :meth:`request`.
+        :returns: The parsed body, or ``None`` (``plone.restapi`` usually
+            answers ``204``).
+        """
+        return self._json(self.request("PATCH", ref, json=data, **kwargs))
+
+    def put(self, ref: str, data: Any = None, **kwargs: Any) -> Any:
+        """``PUT`` JSON to a path and return the JSON body.
+
+        :param ref: Path or URL of the site.
+        :param data: Body.
+        :param kwargs: Extra arguments for :meth:`request`.
+        :returns: The parsed body, or ``None``.
+        """
+        return self._json(self.request("PUT", ref, json=data, **kwargs))
+
+    def delete(self, ref: str, data: Any = None, **kwargs: Any) -> Any:
+        """``DELETE`` a path, with an optional JSON body.
+
+        :param ref: Path or URL of the site.
+        :param data: Body; some services (``@aliases``, ``@relations``) read one.
+        :param kwargs: Extra arguments for :meth:`request`.
+        :returns: The parsed body, or ``None``.
+        """
+        return self._json(self.request("DELETE", ref, json=data, **kwargs))
+
+    def iter_batches(
+        self, ref: str, params: Params = None, *, key: str = "items"
+    ) -> Iterator[dict[str, Any]]:
+        """Yield every page of a batched answer, following ``batching.next``.
+
+        :param ref: Path or URL of a batched service (``/@search``, a folder,
+            ``@users``…).
+        :param params: Query parameters of the first page.
+        :param key: Key of the list in each page.
+        :returns: Each page, as returned by the site.
+        """
+        pairs: list[tuple[str, Any]] = encode_params(params)
+        while True:
+            page = self._json(self.request("GET", ref, params=pairs))
+            yield page
+            next_url = (page.get("batching") or {}).get("next")
+            if not next_url or not page.get(key):
+                return
+            ref = next_url
+            pairs = parse_qsl(urlsplit(next_url).query, keep_blank_values=True)
+
+    def iter_items(
+        self,
+        ref: str,
+        params: Params = None,
+        *,
+        key: str = "items",
+        limit: int | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """Yield the items of every page of a batched answer.
+
+        :param ref: Path or URL of a batched service.
+        :param params: Query parameters of the first page.
+        :param key: Key of the list in each page.
+        :param limit: Stop after this many items.
+        :returns: Each item.
+        """
+        count = 0
+        for page in self.iter_batches(ref, params, key=key):
+            for item in page.get(key) or []:
+                if limit is not None and count >= limit:
+                    return
+                yield item
+                count += 1
+
+    def exists(self, ref: str) -> bool:
+        """Say whether there is an item at a path.
+
+        :param ref: Path or URL of the site.
+        :returns: ``True`` if the item exists, ``False`` on ``404``.
+        :raises PloneAPIError: For any other error, such as ``401``.
+        """
+        response = self.request("GET", ref, raise_for_status=False)
+        if response.status_code == 404:
+            return False
+        if response.status_code >= 400:
+            raise error_from_response(response)
+        return True
 
     # ------------------------------------------------------------------
-    # Auth helpers (re-exposed for convenience)
+    # Life cycle
     # ------------------------------------------------------------------
 
-    def login(self) -> None:
-        """Manually trigger JWT login."""
-        self._conn.login()
+    def close(self) -> None:
+        """Close the HTTP connections."""
+        self._http.close()
 
-    def logout(self) -> None:
-        """Manually trigger JWT logout."""
-        self._conn.logout()
+    def __enter__(self) -> Self:
+        return self
 
-    def renew_token(self) -> None:
-        """Renew the current JWT token."""
-        self._conn.renew_token()
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
-    @property
-    def token(self) -> str:
-        """The current bearer token."""
-        return self._conn.token
-
-    @property
-    def config(self) -> PloneClientConfig:
-        """The active configuration."""
-        return self._config
-
-    # ------------------------------------------------------------------
-    # Dunder
-    # ------------------------------------------------------------------
-
-    def __repr__(self) -> str:  # pragma: no cover
-        return f"PloneClient(base_url={self._config.base_url!r})"
+    def __repr__(self) -> str:
+        return f"PloneClient({self.url!r})"

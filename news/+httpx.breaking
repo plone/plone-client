@@ -1,0 +1,1 @@
+Rewrote the client on `httpx`: one `PloneClient` per site, with the managers as attributes and paths, site URLs, `uid:<UID>` and `resolveuid` links accepted wherever an item is expected. `AsyncPloneClient`, `PloneClientConfig` and the methods for services that `plone.restapi` does not provide were removed, and Python 3.11 is now the minimum. @ericof

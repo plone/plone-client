@@ -1,44 +1,52 @@
-"""Resource managers for plone-client."""
+"""Managers: the areas of ``plone.restapi``, as attributes of the client."""
 
 from .base import BaseManager
-from .blocks import BlocksManager
 from .content import ContentManager
-from .content_extras import CommentsManager
-from .content_extras import HistoryManager
-from .content_extras import TilesManager
-from .database import DatabaseManager
+from .discussion import AliasesManager
+from .discussion import CommentsManager
+from .discussion import RelationsManager
+from .discussion import TranslationsManager
 from .files import FilesManager
-from .relations import RelationsManager
+from .navigation import NavigationManager
+from .search import QuerystringManager
 from .search import SearchManager
-from .system import AddonsManager
-from .system import ControlpanelsManager
-from .system import RegistryManager
-from .system import SiteManager
+from .site import AddonsManager
+from .site import ContentRulesManager
+from .site import ControlpanelsManager
+from .site import RegistryManager
+from .site import SystemManager
+from .types import TypesManager
+from .types import VocabulariesManager
 from .users import GroupsManager
 from .users import SharingManager
 from .users import UsersManager
-from .utilities import UtilitiesManager
-from .workingcopy import WorkingCopyManager
+from .workflow import HistoryManager
+from .workflow import WorkflowManager
+from .workflow import WorkingCopyManager
 
 
 __all__ = [
     "AddonsManager",
+    "AliasesManager",
     "BaseManager",
-    "BlocksManager",
     "CommentsManager",
     "ContentManager",
+    "ContentRulesManager",
     "ControlpanelsManager",
-    "DatabaseManager",
     "FilesManager",
     "GroupsManager",
     "HistoryManager",
+    "NavigationManager",
+    "QuerystringManager",
     "RegistryManager",
     "RelationsManager",
     "SearchManager",
     "SharingManager",
-    "SiteManager",
-    "TilesManager",
+    "SystemManager",
+    "TranslationsManager",
+    "TypesManager",
     "UsersManager",
-    "UtilitiesManager",
+    "VocabulariesManager",
+    "WorkflowManager",
     "WorkingCopyManager",
 ]

@@ -1,17 +1,10 @@
-version: "3.8"
-
-# Used by pytest-docker to spin up a real Plone instance for integration tests.
-# Run integration tests with:
-#   pytest -m integration tests/integration/
-
+# A Plone site for the integration tests, started by pytest-docker.
+# Run them with: make test-integration
 services:
   plone:
-    image: ${PLONE_DOCKER_IMAGE:-ghcr.io/plone/demo-backend:latest}
+    image: ${PLONE_IMAGE:-plone/plone-backend:6.1}
+    environment:
+      SITE: Plone
+      TYPE: volto
     ports:
-      - "55001:8080"
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/Plone"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      - "8080"

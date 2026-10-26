@@ -1,102 +1,85 @@
-"""
-Shared pytest fixtures.
-
-The ``plone`` fixture starts a real Plone container via pytest-docker.
-It is skipped automatically when Docker is not available.
-"""
-
-from __future__ import annotations
-
+from . import FakeSite
+from . import SITE_URL
+from collections.abc import Generator
 from plone_client import PloneClient
-from plone_client.config import PloneClientConfig
-from plone_client.connection import PloneConnection
+from typing import Any
 
-import os
+import keyring
+import keyring.backend
+import keyring.errors
 import pytest
-import requests
-import time
 
 
-# ---------------------------------------------------------------------------
-# Unit-test fixtures — no network required
-# ---------------------------------------------------------------------------
+@pytest.fixture
+def site() -> FakeSite:
+    """A fake Plone site."""
+    return FakeSite()
 
 
-@pytest.fixture()
-def config() -> PloneClientConfig:
-    """Minimal configuration pointing at a fake URL."""
-    return PloneClientConfig(
-        base_url="http://localhost:8080/Plone",
-        username="admin",
-        password="admin",
-        max_retries=0,
-        retry_backoff=0,
-    )
+@pytest.fixture
+def client_factory(site: FakeSite):
+    """Build clients that talk to the fake site."""
+
+    def factory(**kwargs: Any) -> PloneClient:
+        settings: dict[str, Any] = {
+            "url": SITE_URL,
+            "username": "admin",
+            "password": "secret",
+            "retries": 0,
+            "backoff": 0,
+            "transport": site.transport,
+        }
+        settings.update(kwargs)
+        return PloneClient(**settings)
+
+    return factory
 
 
-@pytest.fixture()
-def connection(config: PloneClientConfig) -> PloneConnection:
-    """A PloneConnection wired up with the unit-test config."""
-    return PloneConnection(config)
+@pytest.fixture
+def client(client_factory) -> Generator[PloneClient]:
+    """A client authenticated with basic auth."""
+    with client_factory() as client:
+        yield client
 
 
-@pytest.fixture()
-def client(config: PloneClientConfig) -> PloneClient:
-    """A PloneClient that does NOT auto-login (no open() called)."""
-    return PloneClient(config=config)
+class MemoryKeyring(keyring.backend.KeyringBackend):
+    """A keyring kept in memory."""
 
+    priority = 1  # type: ignore[assignment]
 
-# ---------------------------------------------------------------------------
-# Integration fixtures — requires Docker
-# ---------------------------------------------------------------------------
+    def __init__(self) -> None:
+        super().__init__()
+        self.store: dict[tuple[str, str], str] = {}
 
-PLONE_IMAGE = os.environ.get("PLONE_DOCKER_IMAGE", "plone/plone-backend:6")
-PLONE_URL = "http://localhost:55001/Plone"
-PLONE_USERNAME = "admin"
-PLONE_PASSWORD = "admin"
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.store.get((service, username))
 
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.store[(service, username)] = password
 
-@pytest.fixture(scope="session")
-def docker_compose_file(pytestconfig):  # type: ignore[no-untyped-def]
-    """Path to the docker-compose file used by pytest-docker."""
-    return str(pytestconfig.rootpath / "tests" / "integration" / "docker-compose.yml")
-
-
-def _wait_for_plone(url: str, timeout: int = 120) -> bool:
-    """Poll *url* until Plone responds or *timeout* seconds elapse."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
+    def delete_password(self, service: str, username: str) -> None:
         try:
-            r = requests.get(
-                url,
-                headers={"Accept": "application/json"},
-                timeout=5,
-            )
-            if r.status_code < 500:
-                return True
-        except requests.RequestException:
-            pass
-        time.sleep(2)
-    return False
+            del self.store[(service, username)]
+        except KeyError:
+            raise keyring.errors.PasswordDeleteError(username) from None
 
 
-@pytest.fixture(scope="session")
-def plone_service(docker_services):  # type: ignore[no-untyped-def]
-    """Start Plone via Docker and wait until it is healthy."""
-    docker_services.start("plone")
-    assert _wait_for_plone(PLONE_URL), "Plone did not start in time"
-    return PLONE_URL
+@pytest.fixture
+def memory_keyring() -> Generator[MemoryKeyring]:
+    """Replace the system keyring with one kept in memory."""
+    previous = keyring.get_keyring()
+    backend = MemoryKeyring()
+    keyring.set_keyring(backend)
+    yield backend
+    keyring.set_keyring(previous)
 
 
-@pytest.fixture()
-def integration_client(plone_service: str) -> PloneClient:
-    """A logged-in PloneClient against the Dockerised Plone."""
-    cfg = PloneClientConfig(
-        base_url=plone_service,
-        username=PLONE_USERNAME,
-        password=PLONE_PASSWORD,
-        max_retries=1,
-        retry_backoff=0.1,
-    )
-    with PloneClient(config=cfg) as c:
-        yield c
+@pytest.fixture
+def config_file(tmp_path, monkeypatch):
+    """Path of an isolated configuration file, set in the environment."""
+    path = tmp_path / "config" / "config.toml"
+    monkeypatch.setenv("PLONE_CLIENT_CONFIG", str(path))
+    for name in ("PLONE_CLIENT_PROFILE", "PLONE_CLIENT_URL", "PLONE_CLIENT_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(tmp_path)
+    return path

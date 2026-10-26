@@ -1,0 +1,1 @@
+Added named connection profiles to work with several sites, with passwords kept in the operating system keyring, an environment variable or a command such as a password manager, read-only profiles, and a `.plone-client.toml` file that selects the profile of a project. @ericof

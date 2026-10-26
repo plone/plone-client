@@ -1,59 +1,49 @@
-"""
-plone-client — A Python client for Plone sites via plone.restapi.
+"""plone-client: a Python library and command line client for Plone sites.
 
-Quick start::
+Example::
 
     from plone_client import PloneClient
 
-    with PloneClient(
-        "https://my.plone.site", username="admin", password="secret"
-    ) as client:
-        doc = client.content.get("/front-page")
-        results = client.search.search({"portal_type": "Document"})
+    with PloneClient.from_profile("blog") as site:
+        page = site.content.get("/about")
+        site.workflow.transition("/about", "publish")
 """
 
+from .auth import JWTAuth
+from .auth import TokenAuth
 from .client import PloneClient
-from .config import PloneClientConfig
 from .exceptions import PloneAPIError
 from .exceptions import PloneAuthenticationError
+from .exceptions import PloneBadRequestError
 from .exceptions import PloneClientError
+from .exceptions import PloneConfigurationError
 from .exceptions import PloneConflictError
 from .exceptions import PloneConnectionError
 from .exceptions import PloneForbiddenError
 from .exceptions import PloneNotFoundError
+from .exceptions import PloneReadOnlyError
 from .exceptions import PloneServerError
 from .exceptions import PloneTimeoutError
-from .logging_config import set_logger
-from .logging_config import setup_logging
-from .pagination import BatchResult
-from .pagination import paginate
+from .managers.files import file_data
 
 
-__version__ = "0.1.0"
+__version__ = "1.0.0a1.dev0"
 
 __all__ = [
-    "AsyncPloneClient",
-    "BatchResult",
+    "JWTAuth",
     "PloneAPIError",
     "PloneAuthenticationError",
+    "PloneBadRequestError",
     "PloneClient",
-    "PloneClientConfig",
     "PloneClientError",
+    "PloneConfigurationError",
     "PloneConflictError",
     "PloneConnectionError",
     "PloneForbiddenError",
     "PloneNotFoundError",
+    "PloneReadOnlyError",
     "PloneServerError",
     "PloneTimeoutError",
-    "paginate",
-    "set_logger",
-    "setup_logging",
+    "TokenAuth",
+    "file_data",
 ]
-
-
-def __getattr__(name: str) -> object:
-    if name == "AsyncPloneClient":
-        from .async_client import AsyncPloneClient
-
-        return AsyncPloneClient
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

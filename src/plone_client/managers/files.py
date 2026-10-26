@@ -1,286 +1,289 @@
-"""
-Files & attachments manager.
+"""Files and images: upload, replace and download."""
 
-Covers:
-- Uploading files via ``@upload`` (TUS protocol support in Plone 6)
-- Downloading file/image fields
-- ``@images`` sub-resource (scaled image variants)
-- ``@download`` sub-resource
-"""
-
-from __future__ import annotations
-
+from ..exceptions import PloneClientError
 from .base import BaseManager
 from pathlib import Path
 from typing import Any
-from typing import IO
-from typing import TypeAlias
 
+import base64
 import mimetypes
-import os
 
 
-_FileLike: TypeAlias = IO[bytes] | bytes | Path | str
+#: Chunk size for TUS uploads: 4 MiB.
+TUS_CHUNK_SIZE = 4 * 1024 * 1024
+TUS_VERSION = "1.0.0"
+
+FileSource = str | Path | bytes
 
 
-def _open_file(source: _FileLike) -> tuple[str, IO[bytes], str]:
+def _read(
+    source: FileSource, filename: str | None, content_type: str | None
+) -> tuple[bytes, str, str]:
+    """Bytes, file name and content type of a file.
+
+    :param source: Path of the file, or its bytes.
+    :param filename: File name; required when ``source`` is bytes.
+    :param content_type: Content type; guessed from the file name if missing.
+    :returns: The data, the file name and the content type.
+    :raises ValueError: If bytes are given without a file name.
     """
-    Normalise *source* into ``(filename, file_obj, content_type)``.
-
-    Accepts a file-like object, bytes, a :class:`pathlib.Path`, or a
-    string path.
-
-    :param source: The file data to normalise.
-    :type source: IO[bytes] or bytes or pathlib.Path or str
-    :returns: Tuple of ``(filename, file_obj, content_type)``.
-    :rtype: tuple[str, IO[bytes], str]
-    """
-    if isinstance(source, (str, Path)):
-        path = Path(source)
-        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
-        return path.name, open(path, "rb"), mime
-
     if isinstance(source, bytes):
-        import io
+        if not filename:
+            raise ValueError("A filename is required when uploading bytes")
+        data = source
+    else:
+        path = Path(source)
+        data = path.read_bytes()
+        filename = filename or path.name
+    content_type = (
+        content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    )
+    return data, filename, content_type
 
-        return "upload", io.BytesIO(source), "application/octet-stream"
 
-    # file-like: try to infer name and mime
-    name = getattr(source, "name", "upload")
-    name = os.path.basename(name) if name else "upload"
-    mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
-    return name, source, mime  # type: ignore[return-value]
+def file_data(
+    source: FileSource,
+    *,
+    filename: str | None = None,
+    content_type: str | None = None,
+) -> dict[str, str]:
+    """Value of a file or image field, as ``plone.restapi`` reads it.
+
+    :param source: Path of the file, or its bytes.
+    :param filename: File name; required when ``source`` is bytes.
+    :param content_type: Content type; guessed from the file name if missing.
+    :returns: ``data`` (base64), ``encoding``, ``filename`` and ``content-type``.
+    """
+    data, filename, content_type = _read(source, filename, content_type)
+    return {
+        "data": base64.b64encode(data).decode("ascii"),
+        "encoding": "base64",
+        "filename": filename,
+        "content-type": content_type,
+    }
+
+
+def _defaults(
+    content_type: str, portal_type: str | None, field: str | None
+) -> tuple[str, str]:
+    """Content type and field to store a file in.
+
+    :param content_type: Content type of the file.
+    :param portal_type: Content type asked for, if any.
+    :param field: Field asked for, if any.
+    :returns: ``Image`` and ``image`` for images, ``File`` and ``file``
+        otherwise, unless given.
+    """
+    portal_type = portal_type or (
+        "Image" if content_type.startswith("image/") else "File"
+    )
+    field = field or ("image" if portal_type == "Image" else "file")
+    return portal_type, field
+
+
+def _tus_metadata(values: dict[str, str]) -> str:
+    """``Upload-Metadata`` header for a TUS upload.
+
+    :param values: Metadata, such as ``filename`` and ``content-type``.
+    :returns: Comma separated ``key base64(value)`` pairs.
+    """
+    return ",".join(
+        f"{key} {base64.b64encode(value.encode()).decode('ascii')}"
+        for key, value in values.items()
+    )
 
 
 class FilesManager(BaseManager):
-    """
-    Upload and download files attached to Plone content objects.
-
-    >>> files_mgr.upload("/documents", "myreport.pdf", open("report.pdf", "rb"))
-    >>> image_url = files_mgr.image_scale("/news/article", "image", "preview")
-    """
-
-    # ------------------------------------------------------------------
-    # Upload (classic multipart — works on all Plone versions)
-    # ------------------------------------------------------------------
+    """Files and images stored in content items."""
 
     def upload(
         self,
-        container_path: str,
-        filename: str,
-        source: _FileLike,
+        parent: str,
+        source: FileSource,
         *,
-        field: str = "file",
+        portal_type: str | None = None,
+        field: str | None = None,
+        filename: str | None = None,
         content_type: str | None = None,
-        title: str = "",
-        **extra_fields: Any,
+        **fields: Any,
     ) -> dict[str, Any]:
+        """Create a ``File`` or ``Image`` from a file, in one request.
+
+        The file travels base64 encoded inside the JSON body, which is
+        simple and works on every site; for large files use :meth:`tus_upload`.
+
+        :param parent: Path or URL of the folder.
+        :param source: Path of the file, or its bytes.
+        :param portal_type: Content type; ``Image`` for images and ``File``
+            for anything else by default.
+        :param field: Field that holds the file; ``image`` for ``Image`` and
+            ``file`` otherwise by default.
+        :param filename: File name; required when ``source`` is bytes.
+        :param content_type: Content type; guessed from the file name if missing.
+        :param fields: Other field values, such as ``id`` or ``title``.
+        :returns: The new item.
         """
-        Upload a file into *container_path* as a new File or Image object.
+        value = file_data(source, filename=filename, content_type=content_type)
+        portal_type, field = _defaults(value["content-type"], portal_type, field)
+        data = {"title": value["filename"], **fields, field: value}
+        return self._client.content.create(parent, portal_type, data)
 
-        :param container_path: Path of the Plone folder that will contain
-            the new object.
-        :type container_path: str
-        :param filename: Desired filename (also used as default title).
-        :type filename: str
-        :param source: The file data — accepts a path string, :class:`pathlib.Path`,
-            ``bytes``, or a binary file-like object.
-        :type source: IO[bytes] or bytes or pathlib.Path or str
-        :param field: The schema field name to target (``"file"`` or ``"image"``).
-        :type field: str
-        :param content_type: MIME type.  Auto-detected from *filename* when not given.
-        :type content_type: str or None
-        :param title: Object title.  Defaults to *filename*.
-        :type title: str
-        :param extra_fields: Any additional fields to PATCH onto the created object.
-        """
-        _name, fobj, detected_mime = _open_file(source)
-        mime = content_type or detected_mime
-        portal_type = "Image" if mime.startswith("image/") else "File"
-
-        payload: dict[str, Any] = {
-            "@type": portal_type,
-            "title": title or filename,
-            field: {
-                "filename": filename,
-                "content-type": mime,
-                "encoding": "base64",
-                "data": _encode_b64(fobj.read()),
-            },
-            **extra_fields,
-        }
-        return self._post(container_path, json=payload)
-
-    def update_file_field(
+    def replace(
         self,
-        path: str,
-        source: _FileLike,
+        ref: str,
+        source: FileSource,
         *,
         field: str = "file",
         filename: str | None = None,
         content_type: str | None = None,
-    ) -> dict[str, Any]:
-        """
-        Replace the file data on an existing content object's *field*.
+    ) -> None:
+        """Replace the file stored in a field of an item.
 
-        :param path: Path to the existing content object.
-        :type path: str
-        :param source: New file data.
-        :type source: IO[bytes] or bytes or pathlib.Path or str
-        :param field: Schema field to update (``"file"``, ``"image"``, etc.)
-        :type field: str
-        :param filename: Override filename (auto-detected from *source* when omitted).
-        :type filename: str or None
-        :param content_type: Override MIME type.
-        :type content_type: str or None
+        :param ref: Path or URL of the item.
+        :param source: Path of the file, or its bytes.
+        :param field: Field that holds the file (``image`` for images).
+        :param filename: File name; required when ``source`` is bytes.
+        :param content_type: Content type; guessed from the file name if missing.
         """
-        _name, fobj, detected_mime = _open_file(source)
-        payload = {
-            field: {
-                "filename": filename or _name,
-                "content-type": content_type or detected_mime,
-                "encoding": "base64",
-                "data": _encode_b64(fobj.read()),
-            }
-        }
-        return self._patch(path, json=payload)
+        value = file_data(source, filename=filename, content_type=content_type)
+        self._client.content.update(ref, {field: value}, representation=False)
 
-    # ------------------------------------------------------------------
-    # TUS (chunked upload — Plone 6+)
-    # ------------------------------------------------------------------
+    def download(self, ref: str, *, field: str = "file") -> bytes:
+        """Contents of a file field (``@@download``).
+
+        :param ref: Path or URL of the item.
+        :param field: Field that holds the file (``image`` for images).
+        :returns: The file contents.
+        """
+        response = self._client.request(
+            "GET", self._service(ref, f"@@download/{field}")
+        )
+        return response.content
+
+    def image_scale(
+        self, ref: str, *, field: str = "image", scale: str = "preview"
+    ) -> bytes:
+        """Contents of an image scale (``@@images``).
+
+        :param ref: Path or URL of the item.
+        :param field: Field that holds the image.
+        :param scale: Scale name, such as ``thumb``, ``preview`` or ``large``.
+        :returns: The scaled image.
+        """
+        response = self._client.request(
+            "GET", self._service(ref, f"@@images/{field}/{scale}")
+        )
+        return response.content
+
+    def _tus(
+        self,
+        service: str,
+        data: bytes,
+        metadata: dict[str, str],
+        chunk_size: int,
+    ) -> str:
+        """Send a file with the TUS protocol.
+
+        :param service: Path of ``@tus-upload`` or ``@tus-replace``.
+        :param data: File contents.
+        :param metadata: TUS metadata.
+        :param chunk_size: Bytes sent per request.
+        :returns: URL of the item, from the last ``Location`` header.
+        """
+        response = self._client.request(
+            "POST",
+            service,
+            headers={
+                "Tus-Resumable": TUS_VERSION,
+                "Upload-Length": str(len(data)),
+                "Upload-Metadata": _tus_metadata(metadata),
+            },
+        )
+        upload_url = response.headers.get("Location", "")
+        if self._client.dry_run:
+            return upload_url
+        offset = 0
+        location = ""
+        while offset < len(data):
+            chunk = data[offset : offset + chunk_size]
+            response = self._client.request(
+                "PATCH",
+                upload_url,
+                content=chunk,
+                headers={
+                    "Tus-Resumable": TUS_VERSION,
+                    "Upload-Offset": str(offset),
+                    "Content-Type": "application/offset+octet-stream",
+                },
+            )
+            offset = int(response.headers.get("Upload-Offset", offset + len(chunk)))
+            location = response.headers.get("Location", location)
+        if not location:
+            # plone.restapi answers 204 even when it fails to store the file
+            raise PloneClientError(
+                f"The upload to {service} finished, but the site did not store "
+                "the file; check the content type and field"
+            )
+        return location
 
     def tus_upload(
         self,
-        container_path: str,
-        source: _FileLike,
+        parent: str,
+        source: FileSource,
         *,
+        portal_type: str | None = None,
+        field: str | None = None,
         filename: str | None = None,
         content_type: str | None = None,
-        chunk_size: int = 1024 * 1024,
-    ) -> dict[str, Any]:
+        chunk_size: int = TUS_CHUNK_SIZE,
+    ) -> str:
+        """Create an item from a large file, sent in chunks (``@tus-upload``).
+
+        :param parent: Path or URL of the folder.
+        :param source: Path of the file, or its bytes.
+        :param portal_type: Content type; ``Image`` for images and ``File``
+            for anything else by default.
+        :param field: Field that holds the file; ``image`` for ``Image`` and
+            ``file`` otherwise by default.
+        :param filename: File name; required when ``source`` is bytes.
+        :param content_type: Content type; guessed from the file name if missing.
+        :param chunk_size: Bytes sent per request.
+        :returns: URL of the new item.
         """
-        Upload a file using the TUS resumable upload protocol.
-
-        Plone 6 exposes ``@tus-upload`` on containers.  This method
-        handles the full handshake: ``POST`` to create the upload slot,
-        then ``PATCH`` chunks until complete.
-
-        :param container_path: Destination folder path.
-        :type container_path: str
-        :param source: File data.
-        :type source: IO[bytes] or bytes or pathlib.Path or str
-        :param filename: Filename hint sent to the server.
-        :type filename: str or None
-        :param content_type: MIME type hint.
-        :type content_type: str or None
-        :param chunk_size: Bytes per chunk (default 1 MiB).
-        :type chunk_size: int
-        """
-        _name, fobj, detected_mime = _open_file(source)
-        fname = filename or _name
-        mime = content_type or detected_mime
-
-        # Read all data (for now — streaming TUS would need a different approach)
-        data = fobj.read()
-        total = len(data)
-
-        # Step 1: initiate upload
-        init_resp = self._conn.post(
-            f"{container_path}/@tus-upload",
-            headers={
-                "Tus-Resumable": "1.0.0",
-                "Upload-Length": str(total),
-                "Upload-Metadata": (
-                    f"filename {_b64_str(fname)},content-type {_b64_str(mime)}"
-                ),
-            },
+        data, filename, content_type = _read(source, filename, content_type)
+        portal_type, field = _defaults(content_type, portal_type, field)
+        metadata = {
+            "filename": filename,
+            "content-type": content_type,
+            "@type": portal_type,
+            "fieldname": field,
+        }
+        return self._tus(
+            self._service(parent, "@tus-upload"), data, metadata, chunk_size
         )
-        upload_url = init_resp.headers.get("Location", "")
-        if not upload_url:
-            raise ValueError("TUS server did not return a Location header")
 
-        # Step 2: send chunks
-        offset = 0
-        while offset < total:
-            chunk = data[offset : offset + chunk_size]
-            patch_resp = self._conn._session.patch(
-                upload_url,
-                data=chunk,
-                headers={
-                    "Tus-Resumable": "1.0.0",
-                    "Upload-Offset": str(offset),
-                    "Content-Type": "application/offset+octet-stream",
-                    "Content-Length": str(len(chunk)),
-                },
-                timeout=self._conn._config.timeout,
-            )
-            if patch_resp.status_code not in (200, 204):
-                from ..exceptions import PloneAPIError
+    def tus_replace(
+        self,
+        ref: str,
+        source: FileSource,
+        *,
+        field: str | None = None,
+        filename: str | None = None,
+        content_type: str | None = None,
+        chunk_size: int = TUS_CHUNK_SIZE,
+    ) -> str:
+        """Replace the file of an item with a large file (``@tus-replace``).
 
-                raise PloneAPIError(
-                    f"TUS PATCH failed: {patch_resp.status_code}",
-                    status_code=patch_resp.status_code,
-                )
-            offset += len(chunk)
-
-        # The server returns the new object representation after the last chunk
-        return patch_resp.json() if patch_resp.content else {}
-
-    # ------------------------------------------------------------------
-    # Download
-    # ------------------------------------------------------------------
-
-    def download(self, path: str, field: str = "file") -> bytes:
+        :param ref: Path or URL of the item.
+        :param source: Path of the file, or its bytes.
+        :param field: Field that holds the file.
+        :param filename: File name; required when ``source`` is bytes.
+        :param content_type: Content type; guessed from the file name if missing.
+        :param chunk_size: Bytes sent per request.
+        :returns: URL of the item.
         """
-        Download the raw bytes of a file field.
-
-        :param path: Content object path.
-        :type path: str
-        :param field: Field name (``"file"``, ``"image"``, …).
-        :type field: str
-        """
-        response = self._conn.get(f"{path}/@download/{field}")
-        return response.content
-
-    # ------------------------------------------------------------------
-    # Images
-    # ------------------------------------------------------------------
-
-    def image_scales(self, path: str) -> dict[str, Any]:
-        """Return all available image scales for *path*."""
-        return self._get(f"{path}/@images")
-
-    def image_scale(self, path: str, field: str, scale: str) -> dict[str, Any]:
-        """
-        Return metadata (URL, width, height) for a specific image scale.
-
-        :param path: Content object path.
-        :type path: str
-        :param field: Image field name, typically ``"image"``.
-        :type field: str
-        :param scale: Scale name, e.g. ``"preview"``, ``"thumb"``, ``"mini"``.
-        :type scale: str
-        """
-        return self._get(f"{path}/@images/{field}/{scale}")
-
-    def download_scale(self, path: str, field: str, scale: str) -> bytes:
-        """Download the raw bytes of an image scale."""
-        response = self._conn.get(f"{path}/@images/{field}/{scale}")
-        return response.content
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _encode_b64(data: bytes) -> str:
-    import base64
-
-    return base64.b64encode(data).decode()
-
-
-def _b64_str(value: str) -> str:
-    import base64
-
-    return base64.b64encode(value.encode()).decode()
+        data, filename, content_type = _read(source, filename, content_type)
+        metadata = {"filename": filename, "content-type": content_type}
+        if field:
+            metadata["fieldname"] = field
+        return self._tus(self._service(ref, "@tus-replace"), data, metadata, chunk_size)

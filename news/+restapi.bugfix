@@ -1,0 +1,1 @@
+Fixed the requests for copying, moving and ordering content, changing the registry, group membership, undoing transactions and uploading files with TUS, which did not match what `plone.restapi` expects. @ericof

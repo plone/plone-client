@@ -1,0 +1,1 @@
+Added unit tests that check every request against the `plone.restapi` documentation, and integration tests against Plone 6.0 and 6.1 in Docker. @ericof
