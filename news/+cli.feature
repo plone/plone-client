@@ -1,0 +1,1 @@
+Added the `plone-client` command line, installed with the `cli` extra: read, search, create, change, publish, move, upload and download content, and manage users, groups, the registry and aliases, with JSON output and exit codes meant for scripts and agents. @ericof
