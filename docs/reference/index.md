@@ -22,5 +22,6 @@ cli
 configuration
 exceptions
 python-api
+javascript-client
 /changelog
 ```
