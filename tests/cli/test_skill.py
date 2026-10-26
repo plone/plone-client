@@ -1,3 +1,4 @@
+from pathlib import Path
 from plone_client.cli.skill import skill_text
 
 import pytest
@@ -23,7 +24,7 @@ def test_install_in_project(invoke, tmp_path):
     assert run.exit_code == 0, run.stderr
     target = tmp_path / ".claude/skills/plone-client/SKILL.md"
     assert run.json == {
-        "installed": ".claude/skills/plone-client/SKILL.md",
+        "installed": str(Path(".claude/skills/plone-client/SKILL.md")),
         "replaced": False,
     }
     assert target.read_text() == skill_text()
@@ -34,6 +35,7 @@ def test_install_in_project(invoke, tmp_path):
 
 def test_install_for_user(invoke, tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
     run = invoke("skill", "install", "--user")
     assert run.exit_code == 0, run.stderr
     target = tmp_path / "home/.claude/skills/plone-client/SKILL.md"
