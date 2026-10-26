@@ -1,32 +1,17 @@
-# Security Policy
-
-## Supported versions
-
-| Version | Supported |
-|---------|-----------|
-| 0.1.x   | ✅ Yes     |
+# Security policy
 
 ## Reporting a vulnerability
 
-**Please do not open a public GitHub issue for security vulnerabilities.**
+Do not open a public issue for a security problem.
+Report it to the Plone Security Team, as described at <https://plone.org/security/report>.
 
-Send a report to **security@yourorg.example.com** with:
+This covers plone-client itself.
+Problems in Plone or plone.restapi go to the same team.
 
-1. A description of the vulnerability
-2. Steps to reproduce
-3. The potential impact
-4. Any suggested remediation
+## How plone-client handles secrets
 
-You will receive an acknowledgement within 48 hours.  We aim to release
-a patch within 7 days of confirmation.
-
-## Scope
-
-This policy covers `plone-client` itself.  Vulnerabilities in Plone or
-`plone.restapi` should be reported to the Plone security team at
-https://plone.org/security.
-
-## Responsible disclosure
-
-We follow coordinated disclosure.  Please allow us reasonable time to
-patch before public disclosure.
+- Profiles never store a secret in the configuration file.
+  Secrets live in the operating system's keyring, in an environment variable, or in the output of a command, as each profile chooses.
+- `plone-client profile show` and `profile list` never print a secret.
+- Secret commands run without a shell.
+- With `--password-stdin`, `profile add`, `profile set-secret` and `users create` read the secret from standard input, which keeps it out of the shell history.

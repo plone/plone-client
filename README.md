@@ -1,235 +1,153 @@
 # plone-client
 
-A Python client for [Plone](https://plone.org) sites via [plone.restapi](https://plonerestapi.readthedocs.io).
+A Python library and a command line client for [Plone](https://plone.org) sites, built on [plone.restapi](https://6.docs.plone.org/plone.restapi/).
 
-Inspired by [python-keycloak](https://github.com/marcospereirampj/python-keycloak) — high-level managers for every API feature, automatic retry, environment-variable configuration, and a clean escape hatch for custom endpoints.
+- **As a library**, it gives scripts and applications a typed, synchronous client with one manager per REST API service: content, search, workflow, files, users, groups, registry and more.
+  Use it to sync content from an external source into Plone, to migrate, or to automate site maintenance.
+- **As a command line client**, `plone-client` manages content on any number of Plone sites, each one a named profile whose secret stays in the operating system's keyring.
+  It prints JSON and uses stable exit codes, so coding agents and shell scripts can use it in place of an MCP server.
 
----
+It works with Plone 6.0 and 6.1 and Python 3.11 or later.
 
 ## Installation
 
-```bash
-pip install plone-client
+The library needs only [httpx](https://www.python-httpx.org):
+
+```shell
+uv add plone-client
 ```
 
-For development:
+The command line client needs the `cli` extra, which adds Typer, keyring and tomlkit:
 
-```bash
-git clone https://github.com/yourorg/plone-client
-cd plone-client
-pip install -e ".[dev]"
+```shell
+uv tool install "plone-client[cli]"
 ```
 
----
-
-## Quick Start
+## The library
 
 ```python
 from plone_client import PloneClient
+from plone_client import blocks
 
-with PloneClient(
-    base_url="https://my.plone.site",
-    username="admin",
-    password="secret",
-) as client:
-    # Content CRUD
-    doc = client.content.create("/news", "Document", title="Hello World")
-    results = client.search.search({"portal_type": "Document"})
-    client.content.transition(doc["@id"], "publish")
+with PloneClient("https://example.org", username="editor", password="secret") as client:
+    post = client.content.create(
+        "/blog",
+        "Document",
+        title="Hello, Plone",
+        description="Created with plone-client",
+        **blocks.build(blocks.title(), blocks.description(), blocks.text("First post.")),
+    )
+    client.workflow.transition(post["@id"], "publish")
 
-    # Users & groups
-    users = client.users.list()
-    client.groups.add_member("Reviewers", "jane")
-
-    # Vocabulary lookup
-    keywords = client.site.vocabulary("plone.app.vocabularies.Keywords")
+    for item in client.search.iter("/blog", portal_type="Document", sort_on="created"):
+        print(item["@id"], item["review_state"])
 ```
 
----
+Paths, full URLs, `uid:<UID>` references and `resolveuid` links are all accepted wherever an item is expected.
 
-## Configuration
-
-All settings can be passed as keyword arguments **or** via environment variables.
-
-| Argument         | Environment variable              | Default   |
-|------------------|-----------------------------------|-----------|
-| `base_url`       | `PLONE_CLIENT_BASE_URL`           | —         |
-| `username`       | `PLONE_CLIENT_USERNAME`           | —         |
-| `password`       | `PLONE_CLIENT_PASSWORD`           | —         |
-| `token`          | `PLONE_CLIENT_TOKEN`              | —         |
-| `timeout`        | `PLONE_CLIENT_TIMEOUT`            | `30`      |
-| `verify_ssl`     | `PLONE_CLIENT_VERIFY_SSL`         | `true`    |
-| `max_retries`    | `PLONE_CLIENT_MAX_RETRIES`        | `3`       |
-| `retry_backoff`  | `PLONE_CLIENT_RETRY_BACKOFF`      | `0.5`     |
-| `log_level`      | `PLONE_CLIENT_LOG_LEVEL`          | `WARNING` |
-
-### Using a config object
+### Connecting
 
 ```python
-from plone_client import PloneClient, PloneClientConfig
-
-cfg = PloneClientConfig(
-    base_url="https://my.plone.site",
-    username="editor",
-    password="secret",
-    max_retries=5,
-    retry_backoff=1.0,
-    log_level="DEBUG",
-)
-
-client = PloneClient(config=cfg)
+client = PloneClient("http://localhost:8080/Plone", username="admin", password="admin")
+client = PloneClient(url, username="admin", password="admin", auth_method="jwt")
+client = PloneClient(url, token="eyJhbGciOi...")      # a JWT issued beforehand
+client = PloneClient.from_env()                       # $PLONE_CLIENT_URL, $PLONE_CLIENT_USERNAME…
+client = PloneClient.from_env(prefix="REMOTE_")       # $REMOTE_URL, $REMOTE_USER…
+client = PloneClient.from_profile("production")       # a command line profile, secret from the keyring
 ```
 
----
+With JWT, the client logs in on the first request and logs in again when the token expires.
+Idempotent requests are retried on connection errors and on 429, 502, 503 and 504 responses, honoring `Retry-After`.
 
-## Retry policy
+Two safety switches make automation easier to trust:
 
-Failed requests are automatically retried with exponential back-off:
+- `read_only=True` refuses every request that could change the site, before it is sent.
+- `dry_run=True` records changes in `client.dry_run_log` instead of sending them, while reads still go to the site.
 
-```
-sleep = retry_backoff * (2 ** attempt)
-```
+### Managers
 
-Retries happen on:
-- Network timeouts
-- TCP connection errors
-- HTTP `429`, `500`, `502`, `503`, `504` for **idempotent** methods (`GET`, `DELETE`, …)
+| Attribute | Services |
+|---|---|
+| `content` | content CRUD, `@copy`, `@move`, ordering, `@lock`, `@linkintegrity` |
+| `search`, `querystring` | `@search` (with paging), `@querystring`, `@querystring-search` |
+| `workflow`, `history`, `working_copy` | `@workflow`, `@history`, `@workingcopy` |
+| `files` | base64 and TUS uploads, `@@download`, image scales |
+| `navigation` | `@navigation`, `@breadcrumbs`, `@contextnavigation`, `@navroot`, `@actions`, `@inherit` |
+| `aliases`, `relations`, `comments`, `translations` | `@aliases`, `@relations`, `@comments`, `@translations` |
+| `users`, `groups`, `sharing` | `@users`, `@groups`, `@sharing`, `@principals`, `@roles` |
+| `types`, `vocabularies` | `@types`, `@vocabularies` |
+| `registry`, `controlpanels`, `addons`, `content_rules`, `system` | site administration |
 
-Non-idempotent methods (`POST`, `PATCH`, `PUT`) are **not** retried on 5xx to avoid
-duplicate mutations.
-
----
-
-## Logging
-
-The library uses a single named logger (`plone_client`) with a `NullHandler` by default,
-so it stays silent unless your application configures logging.
-
-### Quick console setup
+For a service without a manager, `client.get()`, `post()`, `patch()`, `put()`, `delete()` and `request()` take a path and return the decoded JSON:
 
 ```python
-import logging
-from plone_client import setup_logging
-
-setup_logging(level=logging.DEBUG)
+client.get("/@my-addon-service", query="value")
 ```
 
-### Use your own logger
+### Errors
 
-```python
-import logging
-from plone_client import set_logger
+Every error derives from `PloneClientError`.
+Errors returned by the site are `PloneAPIError` subclasses named after the status code: `PloneBadRequestError`, `PloneAuthenticationError`, `PloneForbiddenError`, `PloneNotFoundError`, `PloneConflictError` and `PloneServerError`.
+Each one carries the status code, the error type and message from plone.restapi, the request method and the URL.
 
-set_logger(logging.getLogger("myapp"))
+## The command line client
+
+Add a profile per site, then work against the current one or pick another with `-p`:
+
+```shell
+plone-client profile add local --url http://localhost:8080/Plone --username admin --use
+plone-client profile add prod --url https://example.org --username editor --read-only
+plone-client profile list
+plone-client profile test prod
 ```
 
----
+`profile add` asks for the password and stores it in the keyring: macOS Keychain, Windows Credential Locker or Secret Service on Linux.
+A profile can also read its secret from an environment variable (`--secret env`) or from a command such as a password manager's (`--secret command --secret-command "op read op://Private/plone/password"`).
+The profiles live in `~/.config/plone-client/config.toml`, and secrets never do.
 
-## Available managers
+A `.plone-client.toml` file holding `profile = "blog"` selects a profile for everything run in that directory and below, so each project can point at its own site.
 
-| Attribute             | Covers                                               |
-|-----------------------|------------------------------------------------------|
-| `client.content`      | CRUD, copy/move, workflow, lock, aliases, ordering   |
-| `client.search`       | `@search`, `@querystring-search`, lazy iteration     |
-| `client.users`        | `@users`, `@my-information`                          |
-| `client.groups`       | `@groups`, member management                         |
-| `client.sharing`      | `@sharing` (local roles)                             |
-| `client.registry`     | `@registry`                                          |
-| `client.controlpanels`| `@controlpanels`                                     |
-| `client.addons`       | `@addons` (install / uninstall)                      |
-| `client.site`         | `@types`, `@vocabularies`, `@roles`, e-mail, undo    |
-| `client.comments`     | `@comments`                                          |
-| `client.history`      | `@history` (CMFEditions)                             |
-| `client.tiles`        | `@tiles`                                             |
-
----
-
-## Escape hatch
-
-Need to call a custom service, an add-on endpoint, or anything not yet
-covered by the built-in managers?
-
-```python
-# Raw request — returns a requests.Response
-response = client.request("GET", "/@my-addon-endpoint", params={"foo": "bar"})
-data = response.json()
-
-# Convenience shorthands
-client.get("/@search")
-client.post("/news", json={"@type": "Document", "title": "Breaking News"})
-client.patch("/news/breaking-news", json={"description": "Updated"})
-client.delete("/news/old-news")
-
-# File upload
-with open("report.pdf", "rb") as f:
-    client.request("POST", "/documents/@@upload", files={"file": f})
+```shell
+plone-client ls /blog -f @id,title,review_state
+plone-client search -t Document --state private --limit 10
+plone-client create /blog Document --title "Hello" -s subjects:='["plone"]' --publish publish
+plone-client update /blog/hello -s description="Updated"
+plone-client order /blog hello top
+plone-client upload /images photo.jpg
+plone-client -n delete /blog/hello            # print the request, send nothing
+plone-client request GET /@my-addon-service   # any other service
 ```
 
----
+Output is JSON on standard output; `-f` keeps only some keys and `-c` prints one line.
+Errors are JSON on standard error, with these exit codes:
 
-## Error handling
+| Code | Meaning |
+|---|---|
+| 2 | invalid usage |
+| 3 | configuration: unknown profile, missing secret |
+| 4 | not authenticated or not allowed |
+| 5 | not found |
+| 6 | invalid request or conflict |
+| 7 | refused by a read-only profile |
+| 8 | the site could not be reached |
+| 9 | server error |
 
-All exceptions derive from `PloneClientError`:
+Commands that delete need `--yes` when standard input is not a terminal.
+The [documentation](docs/agents.md) has a ready-made section to paste into a project's `CLAUDE.md` or `AGENTS.md`.
 
-```python
-from plone_client import (
-    PloneAuthenticationError,
-    PloneNotFoundError,
-    PloneForbiddenError,
-    PloneConflictError,
-    PloneServerError,
-    PloneTimeoutError,
-    PloneConnectionError,
-    PloneAPIError,       # catch-all for unexpected status codes
-    PloneClientError,    # base — catches everything above
-)
+## Development
 
-try:
-    doc = client.content.get("/secret-page")
-except PloneNotFoundError:
-    print("page does not exist")
-except PloneForbiddenError:
-    print("no permission")
-except PloneClientError as exc:
-    print(f"unexpected error: {exc}")
+```shell
+make install            # create the environment
+make format             # format the code
+make lint               # ruff, mypy, pyroma
+make test               # unit tests
+make test-integration   # integration tests against plone/plone-backend in Docker
+make docs               # build the documentation
 ```
 
----
-
-## Testing
-
-### Unit tests (no Docker required)
-
-```bash
-pytest -m unit
-```
-
-### Integration tests (requires Docker)
-
-```bash
-pytest -m integration
-```
-
-The integration suite uses `pytest-docker` to start `plone/plone-backend:6`
-automatically.  Override the image with:
-
-```bash
-PLONE_DOCKER_IMAGE=plone/plone-backend:6.1 pytest -m integration
-```
-
----
-
-## Contributing
-
-```bash
-pip install -e ".[dev]"
-ruff check src tests
-mypy src
-pytest -m unit
-```
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT
+MIT.

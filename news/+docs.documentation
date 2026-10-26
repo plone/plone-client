@@ -1,0 +1,1 @@
+Rewrote the documentation in MyST, with guides for the library, syncing content from an external source, the command line, profiles and secrets, coding agents, and replacing a hand-written `requests` client, plus runnable examples. @ericof

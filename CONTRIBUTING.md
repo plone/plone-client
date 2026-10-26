@@ -1,98 +1,59 @@
 # Contributing to plone-client
 
-Thank you for your interest in contributing!
+Thank you for helping.
+plone-client follows the [Plone contributing guidelines](https://6.docs.plone.org/contributing/index.html).
 
----
+## Set up
 
-## Setting up a development environment
+You need [uv](https://docs.astral.sh/uv/), and Docker for the integration tests.
 
-```bash
-git clone https://github.com/yourorg/plone-client
+```shell
+git clone https://github.com/plone/plone-client.git
 cd plone-client
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Core + dev tools
 make install
-
-# Also install the async extra (httpx)
-make install-async
 ```
 
----
+## Check your change
 
-## Code style
-
-We use **ruff** for linting and formatting:
-
-```bash
-make lint   # check
-make fmt    # auto-fix
+```shell
+make format             # format the code
+make lint               # ruff, mypy and pyroma; changes nothing
+make test               # unit tests
+make test-coverage      # unit tests with a coverage report
+make test-integration   # integration tests against plone/plone-backend in Docker
+make docs               # build the documentation; warnings are errors
 ```
 
-Type annotations are required for all public API.  Check with:
+Unit tests never touch the network.
+They talk to `tests.FakeSite`, an in-memory site behind an httpx `MockTransport`, and the command line tests use `typer.testing.CliRunner` with the same fake site.
 
-```bash
-make typecheck
+Integration tests start `plone/plone-backend` with pytest-docker.
+Pick another image with `PLONE_IMAGE`.
+
+```shell
+PLONE_IMAGE=plone/plone-backend:6.0 make test-integration
 ```
 
----
+## Add a service
 
-## Tests
+1. Add the methods to the manager for the service in `src/plone_client/managers/`, or create a manager that extends `BaseManager`, and attach it in `PloneClient.__init__`.
+2. Accept item references through `self._resolve()` or `self._service()`, so paths, URLs and UIDs all work.
+3. Add a case to the table in the matching `tests/managers/` module, checking the method, path, query and body sent.
+4. If people will want it on the command line, add a command in `src/plone_client/cli/` and a test in `tests/cli/`.
+5. Document it in `docs/`.
 
-### Unit tests — no Docker, no network
+Docstrings use reStructuredText field lists: `:param:`, `:returns:` and `:raises:`.
 
-```bash
-make test-unit
+## Changelog
+
+Every pull request needs a news fragment in `news/`, which [towncrier](https://towncrier.readthedocs.io) collects at release time.
+Name it after the issue, such as `news/42.feature`, or `news/+short-name.feature` when there is none.
+The types are `breaking`, `feature`, `bugfix`, `internal`, `documentation` and `tests`.
+
+```text
+Added support for the @upgrade service. @your-github-username
 ```
 
-Use `responses` (sync) and `respx` (async) to mock HTTP in unit tests.
-Never make real network calls from unit tests.
+## Report a bug
 
-### Integration tests — Docker required
-
-```bash
-make test-integration
-```
-
-The suite uses `pytest-docker` to start `plone/plone-backend:6`.
-You can override the image:
-
-```bash
-PLONE_DOCKER_IMAGE=plone/plone-backend:6.1 make test-integration
-```
-
-### Coverage
-
-```bash
-make coverage
-# then open htmlcov/index.html
-```
-
----
-
-## Adding a new manager
-
-1. Create `src/plone_client/managers/myfeature.py` extending `BaseManager`.
-2. Register it in `managers/__init__.py`.
-3. Add an attribute in `PloneClient._init_managers()` in `client.py`.
-4. Optionally add an async counterpart in `async_client.py`.
-5. Write unit tests in `tests/unit/test_managers.py` (or a new file).
-6. Document the new manager in `README.md`.
-
----
-
-## Submitting a pull request
-
-1. Fork the repo and create a feature branch.
-2. Write tests — PRs without tests will not be merged.
-3. Run `make lint typecheck test-unit` — all must pass.
-4. Update `CHANGELOG.md` under `[Unreleased]`.
-5. Open a PR with a clear description.
-
----
-
-## Reporting bugs
-
-Open an issue at https://github.com/yourorg/plone-client/issues.
-Include the Plone version, plone.restapi version, and a minimal reproduction.
+Open an issue at <https://github.com/plone/plone-client/issues>, with the versions of plone-client, Plone and plone.restapi, and the smallest example that shows the problem.
