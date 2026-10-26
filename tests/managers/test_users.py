@@ -55,7 +55,7 @@ CASES = [
         None,
     ),
     (
-        lambda c: c.users.change_password("noam", "new", old_password="old"),
+        lambda c: c.users.update_password("noam", "new", old_password="old"),
         "POST",
         "/@users/noam/reset-password",
         [],

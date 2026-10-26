@@ -408,7 +408,7 @@ def aliases_add(
 ) -> None:
     """Make old paths redirect to an item."""
     client = get_state(ctx).client
-    client.aliases.add(ref, aliases)
+    client.aliases.create(ref, aliases)
     emit(ctx, client.dry_run_log[-1] if client.dry_run else client.aliases.list(ref))
 
 
@@ -420,5 +420,5 @@ def aliases_remove(
 ) -> None:
     """Remove aliases."""
     client = get_state(ctx).client
-    client.aliases.remove(ref, aliases)
+    client.aliases.delete(ref, aliases)
     emit(ctx, client.dry_run_log[-1] if client.dry_run else client.aliases.list(ref))

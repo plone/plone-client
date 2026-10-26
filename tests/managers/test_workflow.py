@@ -4,7 +4,7 @@ import pytest
 
 
 CASES = [
-    (lambda c: c.workflow.info("/doc"), "GET", "/doc/@workflow", [], None),
+    (lambda c: c.workflow.get("/doc"), "GET", "/doc/@workflow", [], None),
     (
         lambda c: c.workflow.transition("/doc", "publish"),
         "POST",
@@ -40,7 +40,7 @@ CASES = [
         [],
         {"version": 1},
     ),
-    (lambda c: c.working_copy.info("/doc"), "GET", "/doc/@workingcopy", [], None),
+    (lambda c: c.working_copy.get("/doc"), "GET", "/doc/@workingcopy", [], None),
     (lambda c: c.working_copy.create("/doc"), "POST", "/doc/@workingcopy", [], None),
     (
         lambda c: c.working_copy.check_in("/copy_of_doc"),
@@ -50,7 +50,7 @@ CASES = [
         None,
     ),
     (
-        lambda c: c.working_copy.cancel("/copy_of_doc"),
+        lambda c: c.working_copy.delete("/copy_of_doc"),
         "DELETE",
         "/copy_of_doc/@workingcopy",
         [],

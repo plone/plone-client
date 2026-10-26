@@ -7,7 +7,7 @@ from typing import Any
 class WorkflowManager(BaseManager):
     """Workflow state and transitions (``@workflow``)."""
 
-    def info(self, ref: str) -> dict[str, Any]:
+    def get(self, ref: str) -> dict[str, Any]:
         """Current state, history and available transitions of an item.
 
         :param ref: Path or URL of the item.
@@ -86,7 +86,7 @@ class WorkingCopyManager(BaseManager):
     Needs ``plone.app.iterate`` installed on the site.
     """
 
-    def info(self, ref: str) -> dict[str, Any]:
+    def get(self, ref: str) -> dict[str, Any]:
         """Working copy of an item, or the baseline of a working copy.
 
         :param ref: Path or URL of the baseline or of the working copy.
@@ -109,7 +109,7 @@ class WorkingCopyManager(BaseManager):
         """
         self._client.patch(self._service(ref, "@workingcopy"))
 
-    def cancel(self, ref: str) -> None:
+    def delete(self, ref: str) -> None:
         """Remove a working copy without applying it.
 
         :param ref: Path or URL of the working copy or of the baseline.

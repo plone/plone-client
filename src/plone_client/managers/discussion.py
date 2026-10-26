@@ -22,7 +22,7 @@ class CommentsManager(BaseManager):
         """
         return self._client.iter_items(self._service(ref, "@comments"), limit=limit)
 
-    def add(self, ref: str, text: str, *, reply_to: str | None = None) -> None:
+    def create(self, ref: str, text: str, *, reply_to: str | None = None) -> None:
         """Add a comment, or a reply to a comment.
 
         :param ref: Path or URL of the item.
@@ -110,7 +110,7 @@ class AliasesManager(BaseManager):
         """
         return self._client.get(self._service(ref, "@aliases"), **params)
 
-    def add(self, ref: str, aliases: str | Iterable[str]) -> None:
+    def create(self, ref: str, aliases: str | Iterable[str]) -> None:
         """Add aliases to an item.
 
         :param ref: Path or URL of the item.
@@ -121,7 +121,7 @@ class AliasesManager(BaseManager):
             self._service(ref, "@aliases"), {"items": [{"path": p} for p in paths]}
         )
 
-    def add_redirects(self, redirects: Iterable[Mapping[str, Any]]) -> None:
+    def create_redirects(self, redirects: Iterable[Mapping[str, Any]]) -> None:
         """Add redirections on the site root.
 
         :param redirects: Entries with ``path`` (the old path),
@@ -129,7 +129,7 @@ class AliasesManager(BaseManager):
         """
         self._client.post("/@aliases", {"items": [dict(r) for r in redirects]})
 
-    def remove(self, ref: str, aliases: str | Iterable[str]) -> None:
+    def delete(self, ref: str, aliases: str | Iterable[str]) -> None:
         """Remove aliases.
 
         :param ref: Path or URL of the item, or the site root.

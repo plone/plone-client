@@ -53,7 +53,7 @@ class TypesManager(BaseManager):
         """
         return self._client.get(f"/@types/{portal_type}/{name}")
 
-    def add_field(self, portal_type: str, data: Mapping[str, Any]) -> dict[str, Any]:
+    def create_field(self, portal_type: str, data: Mapping[str, Any]) -> dict[str, Any]:
         """Add a field (or, with ``fieldset`` data, a fieldset) to a type.
 
         Only for types whose schema is stored in the site, not in code.

@@ -6,14 +6,14 @@ import pytest
 
 CASES = [
     (
-        lambda c: c.comments.add("/doc", "Hi"),
+        lambda c: c.comments.create("/doc", "Hi"),
         "POST",
         "/doc/@comments",
         [],
         {"text": "Hi"},
     ),
     (
-        lambda c: c.comments.add("/doc", "Reply", reply_to="123"),
+        lambda c: c.comments.create("/doc", "Reply", reply_to="123"),
         "POST",
         "/doc/@comments/123",
         [],
@@ -64,14 +64,14 @@ CASES = [
         None,
     ),
     (
-        lambda c: c.aliases.add("/doc", ["/a", "/b"]),
+        lambda c: c.aliases.create("/doc", ["/a", "/b"]),
         "POST",
         "/doc/@aliases",
         [],
         {"items": [{"path": "/a"}, {"path": "/b"}]},
     ),
     (
-        lambda c: c.aliases.add_redirects([
+        lambda c: c.aliases.create_redirects([
             {"path": "/old", "redirect-to": "/new", "datetime": "2026-05-05"}
         ]),
         "POST",
@@ -80,7 +80,7 @@ CASES = [
         {"items": [{"path": "/old", "redirect-to": "/new", "datetime": "2026-05-05"}]},
     ),
     (
-        lambda c: c.aliases.remove("/doc", "/a"),
+        lambda c: c.aliases.delete("/doc", "/a"),
         "DELETE",
         "/doc/@aliases",
         [],

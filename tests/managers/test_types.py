@@ -15,7 +15,7 @@ CASES = [
         None,
     ),
     (
-        lambda c: c.types.add_field(
+        lambda c: c.types.create_field(
             "Document", {"factory": "Email", "title": "Author email"}
         ),
         "POST",

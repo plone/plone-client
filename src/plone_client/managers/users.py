@@ -97,7 +97,7 @@ class UsersManager(BaseManager):
         """
         self._client.post(f"/@users/{user_id}/reset-password")
 
-    def change_password(
+    def update_password(
         self, user_id: str, new_password: str, *, old_password: str | None = None
     ) -> None:
         """Set a new password.

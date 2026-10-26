@@ -341,7 +341,7 @@ def workflow(
     """Show the workflow state of an item, or run a transition."""
     client = get_state(ctx).client
     if transition is None:
-        info = client.workflow.info(ref)
+        info = client.workflow.get(ref)
         emit(
             ctx,
             {

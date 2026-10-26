@@ -51,7 +51,7 @@ CASES = [
         {"ext_editor": True},
     ),
     (
-        lambda c: c.controlpanels.add("dexterity-types", {"title": "My Type"}),
+        lambda c: c.controlpanels.create("dexterity-types", {"title": "My Type"}),
         "POST",
         "/@controlpanels/dexterity-types",
         [],
@@ -94,7 +94,7 @@ CASES = [
         None,
     ),
     (
-        lambda c: c.addons.import_profile("plone.restapi", "testing-workflows"),
+        lambda c: c.addons.install_profile("plone.restapi", "testing-workflows"),
         "POST",
         "/@addons/plone.restapi/import/testing-workflows",
         [],

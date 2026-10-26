@@ -74,7 +74,7 @@ class ControlpanelsManager(BaseManager):
         path = f"/@controlpanels/{panel}/{item}" if item else f"/@controlpanels/{panel}"
         self._client.patch(path, dict(data))
 
-    def add(self, panel: str, data: Mapping[str, Any]) -> dict[str, Any]:
+    def create(self, panel: str, data: Mapping[str, Any]) -> dict[str, Any]:
         """Add an item to a control panel, such as a content type.
 
         :param panel: Panel id, such as ``dexterity-types``.
@@ -134,7 +134,7 @@ class AddonsManager(BaseManager):
         """
         return self._client.post(f"/@addons/{addon}/upgrade")
 
-    def import_profile(self, addon: str, profile: str) -> dict[str, Any]:
+    def install_profile(self, addon: str, profile: str) -> dict[str, Any]:
         """Import a GenericSetup profile of an add-on.
 
         :param addon: Add-on id.
