@@ -6,6 +6,10 @@ profiles live in a TOML file, by default ``~/.config/plone-client/config.toml``
 
     current = "blog"
 
+    [defaults]
+    timeout = 60
+    retries = 5
+
     [profiles.blog]
     url = "https://example.org"
     username = "editor"
@@ -21,6 +25,10 @@ profiles live in a TOML file, by default ``~/.config/plone-client/config.toml``
     read_only = true
     secret = "command"
     secret_command = "op read op://Private/example/password"
+    verify = "/etc/ssl/certs/example-ca.pem"
+
+The ``defaults`` table holds the connection settings shared by every
+profile (see :data:`DEFAULT_KEYS`); a profile's own value wins.
 
 Secrets never go in the file. By default they are kept in the operating
 system's keyring (macOS Keychain, Windows Credential Locker, Secret Service
@@ -55,6 +63,35 @@ Auth = Literal["basic", "jwt", "token"]
 SecretSource = Literal["keyring", "env", "command", "none"]
 AUTH_VALUES: tuple[str, ...] = ("basic", "jwt", "token")
 SECRET_VALUES: tuple[str, ...] = ("keyring", "env", "command", "none")
+#: Settings allowed in the ``defaults`` table of the configuration file.
+DEFAULT_KEYS: tuple[str, ...] = (
+    "timeout",
+    "verify",
+    "retries",
+    "backoff",
+    "api_prefix",
+    "read_only",
+)
+TRUE_WORDS = frozenset({"1", "true", "yes", "on"})
+FALSE_WORDS = frozenset({"0", "false", "no", "off"})
+
+
+def parse_verify(value: str) -> bool | str:
+    """Read a ``verify`` setting written as text.
+
+    :param value: ``true`` or ``false`` (also ``1``/``0``, ``yes``/``no``,
+        ``on``/``off``), or the path of a CA bundle.
+    :returns: A boolean, or the path.
+    :raises PloneConfigurationError: If the value is empty.
+    """
+    text = value.strip()
+    if not text:
+        raise PloneConfigurationError("verify must be true, false or a CA bundle path")
+    if text.lower() in TRUE_WORDS:
+        return True
+    if text.lower() in FALSE_WORDS:
+        return False
+    return text
 
 
 def default_config_path(environ: Mapping[str, str] | None = None) -> Path:
@@ -106,7 +143,11 @@ class Profile:
         ``secret = "command"``; run without a shell.
     :param read_only: Refuse every request that could change the site.
     :param timeout: Seconds to wait for the site.
-    :param verify: Verify TLS certificates.
+    :param verify: Verify TLS certificates; a path verifies them against
+        that CA bundle (a file or a directory) instead of the default one.
+    :param retries: Times a request is repeated after a network error or an
+        overloaded site; see :class:`~plone_client.PloneClient`.
+    :param backoff: Base delay in seconds between retries.
     :param api_prefix: Traversal prefix of the REST API.
     :param description: Free text, shown by ``plone-client profile list``.
     """
@@ -120,7 +161,9 @@ class Profile:
     secret_command: str = ""
     read_only: bool = False
     timeout: float = 30.0
-    verify: bool = True
+    verify: bool | str = True
+    retries: int = 3
+    backoff: float = 0.5
     api_prefix: str = "++api++"
     description: str = ""
 
@@ -142,7 +185,32 @@ class Profile:
             raise PloneConfigurationError(
                 f"Profile {self.name!r}: secret_command is required"
             )
+        self._check_connection()
         self.url = self.url.rstrip("/")
+
+    def _check_connection(self) -> None:
+        """Check ``verify``, ``timeout``, ``retries`` and ``backoff``.
+
+        :raises PloneConfigurationError: If a value is invalid.
+        """
+        if not isinstance(self.verify, bool | str) or self.verify == "":
+            raise PloneConfigurationError(
+                f"Profile {self.name!r}: verify must be true, false or a CA bundle path"
+            )
+        for key in ("timeout", "retries", "backoff"):
+            value = getattr(self, key)
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise PloneConfigurationError(
+                    f"Profile {self.name!r}: {key} must be a number"
+                )
+            if value < 0 or (key == "timeout" and value == 0):
+                raise PloneConfigurationError(
+                    f"Profile {self.name!r}: {key} must be positive"
+                )
+        if not isinstance(self.retries, int):
+            raise PloneConfigurationError(
+                f"Profile {self.name!r}: retries must be a whole number"
+            )
 
     @property
     def anonymous(self) -> bool:
@@ -166,16 +234,18 @@ class Profile:
             )
         return cls(name=name, **dict(data))
 
-    def to_mapping(self) -> dict[str, Any]:
+    def to_mapping(self, defaults: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """Table for the configuration file, without default values.
 
+        :param defaults: The ``defaults`` table; values equal to it are left
+            out, so the profile keeps following it.
         :returns: The settings that differ from the defaults, ``url`` first.
         """
-        defaults = Profile(name=self.name, url=self.url)
+        baseline = Profile(name=self.name, url=self.url, **dict(defaults or {}))
         return {
             key: value
             for key, value in asdict(self).items()
-            if key != "name" and (key == "url" or value != getattr(defaults, key))
+            if key != "name" and (key == "url" or value != getattr(baseline, key))
         }
 
     def get_secret(self) -> str:
@@ -198,6 +268,8 @@ class Profile:
             "api_prefix": self.api_prefix,
             "timeout": self.timeout,
             "verify": self.verify,
+            "retries": self.retries,
+            "backoff": self.backoff,
             "read_only": self.read_only,
         }
         secret = self.get_secret()
@@ -228,9 +300,46 @@ class Config:
         self.path = path
         data = dict(data or {})
         self.current: str = str(data.get("current", ""))
-        self.profiles: dict[str, Profile] = {
-            name: Profile.from_mapping(name, table)
+        self.defaults: dict[str, Any] = {}
+        self.profiles: dict[str, Profile] = {}
+        self.set_defaults(data.get("defaults") or {})
+        self.profiles = {
+            name: Profile.from_mapping(name, {**self.defaults, **table})
             for name, table in (data.get("profiles") or {}).items()
+        }
+
+    def set_defaults(self, values: Mapping[str, Any]) -> None:
+        """Change the settings shared by every profile.
+
+        Profiles that took a setting from the old defaults take it from the
+        new ones; settings of their own are kept.
+
+        :param values: Settings to set; ``None`` removes a setting.
+        :raises PloneConfigurationError: If a key is not one of
+            :data:`DEFAULT_KEYS` or a value is invalid.
+        """
+        unknown = set(values) - set(DEFAULT_KEYS)
+        if unknown:
+            raise PloneConfigurationError(
+                f"defaults: unknown keys {', '.join(sorted(unknown))} "
+                f"(allowed: {', '.join(DEFAULT_KEYS)})"
+            )
+        merged = {**self.defaults, **values}
+        merged = {key: value for key, value in merged.items() if value is not None}
+        try:
+            Profile(name="defaults", url="https://example.org", **merged)
+        except PloneConfigurationError as exc:
+            raise PloneConfigurationError(
+                str(exc).replace("Profile 'defaults'", "defaults")
+            ) from None
+        own = {
+            name: profile.to_mapping(self.defaults)
+            for name, profile in self.profiles.items()
+        }
+        self.defaults = merged
+        self.profiles = {
+            name: Profile.from_mapping(name, {**merged, **table})
+            for name, table in own.items()
         }
 
     def get(self, name: str) -> Profile:
@@ -295,13 +404,15 @@ class Config:
     def to_mapping(self) -> dict[str, Any]:
         """Contents of the configuration file.
 
-        :returns: ``current`` and the ``profiles`` tables.
+        :returns: ``current`` and the ``defaults`` and ``profiles`` tables.
         """
         data: dict[str, Any] = {}
         if self.current:
             data["current"] = self.current
+        if self.defaults:
+            data["defaults"] = dict(self.defaults)
         data["profiles"] = {
-            name: profile.to_mapping()
+            name: profile.to_mapping(self.defaults)
             for name, profile in sorted(self.profiles.items())
         }
         return data
@@ -356,7 +467,8 @@ def settings_from_env(
     """Client settings from environment variables.
 
     Reads ``URL``, ``USERNAME`` (or ``USER``), ``PASSWORD``, ``TOKEN``,
-    ``AUTH_METHOD``, ``API_PREFIX``, ``TIMEOUT``, ``VERIFY`` and
+    ``AUTH_METHOD``, ``API_PREFIX``, ``TIMEOUT``, ``VERIFY`` (``true``,
+    ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF`` and
     ``READ_ONLY``, each after the prefix. With ``prefix="REMOTE_"``, this
     reads the ``REMOTE_URL``, ``REMOTE_USER`` and ``REMOTE_PASSWORD``
     variables used by older scripts.
@@ -383,13 +495,16 @@ def settings_from_env(
         settings["auth_method"] = value("AUTH_METHOD")
     if f"{prefix}API_PREFIX" in environ:
         settings["api_prefix"] = value("API_PREFIX")
-    if value("TIMEOUT"):
-        try:
-            settings["timeout"] = float(value("TIMEOUT"))
-        except ValueError:
-            raise PloneConfigurationError(f"{prefix}TIMEOUT must be a number") from None
+    for name, kind in (("TIMEOUT", float), ("RETRIES", int), ("BACKOFF", float)):
+        if value(name):
+            try:
+                settings[name.lower()] = kind(value(name))
+            except ValueError:
+                raise PloneConfigurationError(
+                    f"{prefix}{name} must be a number"
+                ) from None
     if value("VERIFY"):
-        settings["verify"] = _bool(value("VERIFY"))
+        settings["verify"] = parse_verify(value("VERIFY"))
     if value("READ_ONLY"):
         settings["read_only"] = _bool(value("READ_ONLY"))
     return settings

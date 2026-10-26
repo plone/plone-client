@@ -58,7 +58,7 @@ Options marked "No" must come before the command, because `profile add` has opti
 | `vocabulary [name]` | List vocabularies, or the terms of one. |
 | `sharing <ref>` | Show the local roles of an item. |
 | `request <method> <ref>` | Send any request, for services without a command. |
-| `profile list`, `show`, `add`, `set-secret`, `use`, `remove`, `test` | Manage connection profiles. |
+| `profile list`, `show`, `add`, `defaults`, `set-secret`, `use`, `remove`, `test` | Manage connection profiles; `add` and `defaults` take `--timeout`, `--verify` (`true`, `false`, or a CA bundle path), `--retries`, and `--backoff`. |
 | `registry list`, `get`, `set` | Read and change registry records. |
 | `users list`, `get`, `create`, `update`, `delete` | Manage users. |
 | `groups list`, `get`, `create`, `add-member`, `remove-member`, `delete` | Manage groups. |

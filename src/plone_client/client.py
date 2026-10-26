@@ -13,6 +13,7 @@ Example::
 from .auth import AuthMethod
 from .auth import build_auth
 from .exceptions import error_from_response
+from .exceptions import PloneConfigurationError
 from .exceptions import PloneConnectionError
 from .exceptions import PloneReadOnlyError
 from .exceptions import PloneTimeoutError
@@ -51,6 +52,7 @@ from urllib.parse import urlsplit
 import httpx
 import logging
 import os
+import ssl
 import time
 
 
@@ -119,6 +121,25 @@ def _scalar(value: Any) -> str:
     return str(value)
 
 
+def ssl_verify(verify: bool | str | ssl.SSLContext) -> bool | ssl.SSLContext:
+    """TLS verification setting for :mod:`httpx`.
+
+    :param verify: ``True``, ``False``, an SSL context, or the path of a CA
+        bundle (a file or a directory of certificates).
+    :returns: The boolean or context; a path becomes a context that trusts
+        only the certificates of that bundle.
+    :raises PloneConfigurationError: If the path does not exist.
+    """
+    if not isinstance(verify, str):
+        return verify
+    path = Path(verify).expanduser()
+    if path.is_dir():
+        return ssl.create_default_context(capath=str(path))
+    if path.is_file():
+        return ssl.create_default_context(cafile=str(path))
+    raise PloneConfigurationError(f"CA bundle not found: {path}")
+
+
 def _parse_retry_after(response: httpx.Response) -> float:
     """Seconds to wait according to ``Retry-After``.
 
@@ -152,7 +173,9 @@ class PloneClient:
         with and without a Volto frontend in front of the backend; use an
         empty string to rely on the ``Accept`` header only.
     :param timeout: Seconds to wait for the site.
-    :param verify: Verify TLS certificates.
+    :param verify: Verify TLS certificates. A path (a file or a directory)
+        verifies them against that CA bundle instead of the default one; an
+        :class:`ssl.SSLContext` is used as given.
     :param retries: Times a request is repeated after a network error, or
         after a ``429``/``502``/``503``/``504`` answer to an idempotent method.
     :param backoff: Base delay in seconds between retries; doubles each time.
@@ -174,7 +197,7 @@ class PloneClient:
         auth: httpx.Auth | None = None,
         api_prefix: str = "++api++",
         timeout: float = 30.0,
-        verify: bool = True,
+        verify: bool | str | ssl.SSLContext = True,
         retries: int = 3,
         backoff: float = 0.5,
         headers: Mapping[str, str] | None = None,
@@ -201,6 +224,7 @@ class PloneClient:
                 login_url=self.api_url("/@login"),
             )
         self.username = username
+        verify = ssl_verify(verify)
         self._http = httpx.Client(
             auth=auth,
             headers={
@@ -245,7 +269,8 @@ class PloneClient:
 
         Reads ``<prefix>URL``, ``<prefix>USERNAME``, ``<prefix>PASSWORD``,
         ``<prefix>TOKEN``, ``<prefix>AUTH_METHOD``, ``<prefix>TIMEOUT``,
-        ``<prefix>VERIFY`` and ``<prefix>READ_ONLY``.
+        ``<prefix>VERIFY``, ``<prefix>RETRIES``, ``<prefix>BACKOFF`` and
+        ``<prefix>READ_ONLY``; see :func:`~plone_client.profiles.settings_from_env`.
 
         :param prefix: Prefix of the variable names.
         :param overrides: Keyword arguments that win over the environment.

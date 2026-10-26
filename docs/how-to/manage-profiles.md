@@ -52,6 +52,34 @@ plone-client profile add ci --url https://staging.example.org --username bot \
 
 For a site you read anonymously, leave out `--username` and pass `--secret none`.
 
+## Tune the connection
+
+A slow site needs a longer timeout, and a flaky network more retries.
+
+```shell
+plone-client profile add archive --url https://archive.example.org --username editor \
+  --timeout 120 --retries 6 --backoff 1
+```
+
+If the site's certificate comes from your organization's own certificate authority, give the CA bundle.
+
+```shell
+plone-client profile add intranet --url https://intranet.example.org --username editor \
+  --verify /etc/ssl/certs/example-ca.pem
+```
+
+`--verify false` turns certificate checks off.
+Use it only for a local site with a self-signed certificate.
+
+To use the same settings for every profile, set them as defaults.
+
+```shell
+plone-client profile defaults --timeout 60 --retries 5
+```
+
+Profiles take these values unless they set their own.
+Run `profile defaults` without options to see them, and pass `--unset timeout` to remove one.
+
 ## Check a profile
 
 ```shell

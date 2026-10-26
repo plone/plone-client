@@ -27,7 +27,7 @@ def fake_transport(site, monkeypatch):
     """Make the command line's client talk to the fake site."""
 
     def factory(**kwargs: Any) -> PloneClient:
-        return PloneClient(**kwargs, transport=site.transport, retries=0)
+        return PloneClient(**{**kwargs, "transport": site.transport, "retries": 0})
 
     monkeypatch.setattr(state_module, "PloneClient", factory)
     return site

@@ -24,10 +24,15 @@ The first of these locations that is set wins.
 ```toml
 current = "local"
 
+[defaults]
+timeout = 60
+retries = 5
+
 [profiles.local]
 url = "http://localhost:8080/Plone"
 username = "admin"
 auth = "jwt"
+retries = 0
 
 [profiles.prod]
 url = "https://example.org"
@@ -35,11 +40,13 @@ username = "editor"
 read_only = true
 secret = "command"
 secret_command = "op read op://Private/example/password"
+verify = "/etc/ssl/certs/example-ca.pem"
 ```
 
 | Key | Meaning |
 |---|---|
 | `current` | Name of the profile used when no other one is selected. |
+| `defaults` | Connection settings shared by every profile; see below. |
 | `profiles.<name>` | One table per profile; see below. |
 
 The file never holds a secret.
@@ -55,12 +62,26 @@ The file never holds a secret.
 | `secret_env` | string | `PLONE_CLIENT_PASSWORD` | Variable holding the secret, with `secret = "env"`. |
 | `secret_command` | string | `""` | Command printing the secret, with `secret = "command"`; run without a shell. |
 | `read_only` | boolean | `false` | Refuse every request that could change the site. |
-| `timeout` | number | `30.0` | Seconds to wait for the site. |
-| `verify` | boolean | `true` | Verify TLS certificates. |
+| `timeout` | number | `30.0` | Seconds to wait for the site; must be greater than zero. |
+| `verify` | boolean or string | `true` | Verify TLS certificates. A string is the path of a CA bundle, a file or a directory, used instead of the default certificates; `~` is expanded. |
+| `retries` | integer | `3` | Times a request is repeated after a network error, or after a `429`, `502`, `503`, or `504` answer to a request that is safe to repeat. `0` turns retries off. |
+| `backoff` | number | `0.5` | Base delay in seconds between retries; it doubles after each one. |
 | `api_prefix` | string | `++api++` | Traversal prefix of the REST API. |
 | `description` | string | `""` | Free text, shown by `plone-client profile list`. |
 
 Profile names start with a letter or a digit and contain only letters, digits, `_`, `.`, and `-`.
+
+## Defaults
+
+The `defaults` table sets connection settings for every profile.
+A profile's own value wins over it.
+
+| Key | Allowed |
+|---|---|
+| `timeout`, `verify`, `retries`, `backoff`, `api_prefix`, `read_only` | Yes |
+| Any other key | No; the file is refused. |
+
+When the configuration file is saved, a profile does not repeat a value equal to the defaults, so it follows later changes to them.
 
 ## Secrets in the keyring
 
@@ -108,7 +129,9 @@ It then reads the settings from the environment variables below.
 | `PLONE_CLIENT_AUTH_METHOD` | `basic` or `jwt`. |
 | `PLONE_CLIENT_API_PREFIX` | Traversal prefix of the REST API. |
 | `PLONE_CLIENT_TIMEOUT` | Seconds to wait for the site. |
-| `PLONE_CLIENT_VERIFY` | `false` to skip TLS verification. |
+| `PLONE_CLIENT_VERIFY` | `false` to skip TLS verification, or the path of a CA bundle. |
+| `PLONE_CLIENT_RETRIES` | Times a request is repeated; `0` turns retries off. |
+| `PLONE_CLIENT_BACKOFF` | Base delay in seconds between retries. |
 | `PLONE_CLIENT_READ_ONLY` | `true` to refuse every change. |
 
 These two are read by the command line only.

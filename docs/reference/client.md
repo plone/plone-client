@@ -26,7 +26,7 @@ myst:
 | `auth` | `httpx.Auth` or `None` | `None` | A custom authentication flow; overrides the three above. |
 | `api_prefix` | `str` | `"++api++"` | Traversal prefix of the REST API. |
 | `timeout` | `float` | `30.0` | Seconds to wait for the site. |
-| `verify` | `bool` | `True` | Verify TLS certificates. |
+| `verify` | `bool`, `str`, or {class}`ssl.SSLContext` | `True` | Verify TLS certificates; a path of a CA bundle, a file or a directory, replaces the default certificates. |
 | `retries` | `int` | `3` | Retries of idempotent requests. |
 | `backoff` | `float` | `0.5` | Base of the exponential delay between retries, in seconds. |
 | `headers` | mapping or `None` | `None` | Extra headers sent with every request. |
@@ -39,7 +39,7 @@ myst:
 | Constructor | Reads |
 |---|---|
 | `PloneClient(url, …)` | The arguments. |
-| {meth}`~plone_client.PloneClient.from_env` | `<prefix>URL`, `<prefix>USERNAME` or `<prefix>USER`, `<prefix>PASSWORD`, `<prefix>TOKEN`, `<prefix>AUTH_METHOD`, `<prefix>API_PREFIX`, `<prefix>TIMEOUT`, `<prefix>VERIFY`, `<prefix>READ_ONLY`; the prefix defaults to `PLONE_CLIENT_`. |
+| {meth}`~plone_client.PloneClient.from_env` | `<prefix>URL`, `<prefix>USERNAME` or `<prefix>USER`, `<prefix>PASSWORD`, `<prefix>TOKEN`, `<prefix>AUTH_METHOD`, `<prefix>API_PREFIX`, `<prefix>TIMEOUT`, `<prefix>VERIFY`, `<prefix>RETRIES`, `<prefix>BACKOFF`, `<prefix>READ_ONLY`; the prefix defaults to `PLONE_CLIENT_`. |
 | {meth}`~plone_client.PloneClient.from_profile` | A profile from the configuration file, and its secret. |
 
 Keyword arguments passed to either class method win over the settings it reads.

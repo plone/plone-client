@@ -5,6 +5,8 @@ from ..client import PloneClient
 from ..exceptions import PloneAPIError
 from ..exceptions import PloneConfigurationError
 from ..profiles import AUTH_VALUES
+from ..profiles import DEFAULT_KEYS
+from ..profiles import parse_verify
 from ..profiles import Profile
 from ..profiles import SECRET_VALUES
 from .output import emit
@@ -39,6 +41,35 @@ def _read_secret(from_stdin: bool, label: str) -> str:
     if not value:
         raise PloneConfigurationError(f"The {label.lower()} is empty")
     return str(value)
+
+
+TIMEOUT_HELP = "Seconds to wait for the site."
+VERIFY_HELP = "Verify TLS certificates: true, false, or a CA bundle path."
+RETRIES_HELP = "Times a request is repeated after a network error."
+BACKOFF_HELP = "Base delay in seconds between retries."
+
+
+def _connection_settings(
+    timeout: float | None,
+    verify: str | None,
+    retries: int | None,
+    backoff: float | None,
+) -> dict[str, Any]:
+    """Connection settings given on the command line.
+
+    :param timeout: ``--timeout``.
+    :param verify: ``--verify``, as text.
+    :param retries: ``--retries``.
+    :param backoff: ``--backoff``.
+    :returns: The settings that were given.
+    """
+    settings: dict[str, Any] = {
+        "timeout": timeout,
+        "verify": None if verify is None else parse_verify(verify),
+        "retries": retries,
+        "backoff": backoff,
+    }
+    return {key: value for key, value in settings.items() if value is not None}
 
 
 def check_connection(client: PloneClient, username: str = "") -> dict[str, Any]:
@@ -120,6 +151,18 @@ def add(
     read_only: Annotated[
         bool, typer.Option(help="Refuse changes to this site.")
     ] = False,
+    timeout: Annotated[
+        float | None, typer.Option(help=TIMEOUT_HELP, show_default=False)
+    ] = None,
+    verify: Annotated[
+        str | None, typer.Option(help=VERIFY_HELP, show_default=False)
+    ] = None,
+    retries: Annotated[
+        int | None, typer.Option(help=RETRIES_HELP, show_default=False)
+    ] = None,
+    backoff: Annotated[
+        float | None, typer.Option(help=BACKOFF_HELP, show_default=False)
+    ] = None,
     description: Annotated[str, typer.Option(help="Free text.")] = "",
     password_stdin: Annotated[
         bool,
@@ -133,9 +176,14 @@ def add(
     """Add a profile, and store its secret in the keyring.
 
     With --secret keyring (the default) and a username, the password is asked
-    for, or read from standard input with --password-stdin.
+    for, or read from standard input with --password-stdin. Connection
+    settings left out come from the defaults (see 'profile defaults').
     """
     state = get_state(ctx)
+    config = state.config
+    settings = _connection_settings(timeout, verify, retries, backoff)
+    if read_only:
+        settings["read_only"] = True
     profile = Profile(
         name=name,
         url=url,
@@ -144,10 +192,9 @@ def add(
         secret=secret,  # type: ignore[arg-type]
         secret_env=secret_env,
         secret_command=secret_command,
-        read_only=read_only,
         description=description,
+        **{**config.defaults, **settings},
     )
-    config = state.config
     config.add(profile, replace=replace)
     if profile.secret == "keyring" and not profile.anonymous:
         label = "Token" if profile.auth == "token" else "Password"
@@ -156,6 +203,50 @@ def add(
         config.current = name
     config.save()
     emit(ctx, {**profile.summary(), "current": config.current == name})
+
+
+@app.command()
+def defaults(
+    ctx: typer.Context,
+    timeout: Annotated[
+        float | None, typer.Option(help=TIMEOUT_HELP, show_default=False)
+    ] = None,
+    verify: Annotated[
+        str | None, typer.Option(help=VERIFY_HELP, show_default=False)
+    ] = None,
+    retries: Annotated[
+        int | None, typer.Option(help=RETRIES_HELP, show_default=False)
+    ] = None,
+    backoff: Annotated[
+        float | None, typer.Option(help=BACKOFF_HELP, show_default=False)
+    ] = None,
+    read_only: Annotated[
+        bool | None,
+        typer.Option(
+            "--read-only/--read-write",
+            help="Refuse changes to every site.",
+            show_default=False,
+        ),
+    ] = None,
+    unset: Annotated[
+        list[str] | None,
+        typer.Option(help=f"Remove a setting: {', '.join(DEFAULT_KEYS)}."),
+    ] = None,
+) -> None:
+    """Show or change the connection settings shared by every profile.
+
+    Without options, show them. A profile's own setting wins over these.
+    """
+    config = get_state(ctx).config
+    values: dict[str, Any] = _connection_settings(timeout, verify, retries, backoff)
+    if read_only is not None:
+        values["read_only"] = read_only
+    for key in unset or []:
+        values[key.replace("-", "_")] = None
+    if values:
+        config.set_defaults(values)
+        config.save()
+    emit(ctx, {"defaults": config.defaults, "config_file": str(config.path)})
 
 
 @app.command("set-secret")

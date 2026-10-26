@@ -10,8 +10,10 @@ from plone_client.exceptions import PloneServerError
 from plone_client.exceptions import PloneTimeoutError
 
 import base64
+import certifi
 import httpx
 import pytest
+import ssl
 
 
 @pytest.mark.parametrize(
@@ -306,3 +308,38 @@ def test_from_profile(config_file, monkeypatch, site):
 def test_context_manager_and_repr(client_factory):
     with client_factory() as client:
         assert repr(client) == f"PloneClient('{SITE_URL}')"
+
+
+def test_from_profile_uses_defaults(config_file, site):
+    config_file.parent.mkdir(parents=True)
+    config_file.write_text(
+        'current = "dev"\n[defaults]\nretries = 5\nbackoff = 2\n'
+        '[profiles.dev]\nurl = "http://plone.test/Plone"\nbackoff = 1\n'
+    )
+    client = PloneClient.from_profile(transport=site.transport)
+    assert (client.retries, client.backoff) == (5, 1)
+
+
+def test_ssl_verify_passes_booleans_and_contexts_through():
+    context = ssl.create_default_context()
+    assert client_module.ssl_verify(True) is True
+    assert client_module.ssl_verify(False) is False
+    assert client_module.ssl_verify(context) is context
+
+
+def test_ssl_verify_loads_a_ca_bundle_file():
+    context = client_module.ssl_verify(certifi.where())
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.cert_store_stats()["x509_ca"] > 0
+
+
+def test_ssl_verify_accepts_a_directory(tmp_path):
+    context = client_module.ssl_verify(str(tmp_path))
+    assert isinstance(context, ssl.SSLContext)
+    assert context.cert_store_stats()["x509_ca"] == 0
+
+
+def test_ssl_verify_missing_bundle(tmp_path):
+    with pytest.raises(PloneConfigurationError, match="CA bundle not found"):
+        PloneClient(SITE_URL, verify=str(tmp_path / "missing.pem"))

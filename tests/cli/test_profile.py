@@ -108,6 +108,53 @@ def test_add_duplicate_and_invalid(invoke, memory_keyring):
     assert "auth must be one of" in run.error["message"]
 
 
+def test_add_connection_settings(invoke, memory_keyring):
+    run = _add(
+        invoke,
+        "blog",
+        "--timeout",
+        "60",
+        "--verify",
+        "/etc/ssl/ca.pem",
+        "--retries",
+        "5",
+        "--backoff",
+        "2",
+    )
+    assert run.exit_code == 0, run.stderr
+    assert {k: run.json[k] for k in ("timeout", "verify", "retries", "backoff")} == {
+        "timeout": 60.0,
+        "verify": "/etc/ssl/ca.pem",
+        "retries": 5,
+        "backoff": 2.0,
+    }
+    assert _add(invoke, "local", "--verify", "no").json["verify"] is False
+
+
+def test_defaults_command(invoke, memory_keyring, config_file):
+    assert invoke("profile", "defaults").json["defaults"] == {}
+    run = invoke("profile", "defaults", "--timeout", "60", "--read-only")
+    assert run.exit_code == 0, run.stderr
+    assert run.json["defaults"] == {"timeout": 60.0, "read_only": True}
+    _add(invoke, "blog")
+    _add(invoke, "slow", "--timeout", "120")
+    assert invoke("profile", "show", "blog").json["timeout"] == 60.0
+    assert invoke("profile", "show", "slow").json["timeout"] == 120.0
+    assert "timeout" not in load_config(config_file).to_mapping()["profiles"]["blog"]
+    run = invoke("profile", "defaults", "--unset", "timeout", "--read-write")
+    assert run.json["defaults"] == {"read_only": False}
+    assert "timeout" not in invoke("profile", "show", "blog").json
+
+
+def test_defaults_errors(invoke):
+    run = invoke("profile", "defaults", "--unset", "username")
+    assert run.exit_code == 3
+    assert "unknown keys username" in run.error["message"]
+    run = invoke("profile", "defaults", "--retries", "-1")
+    assert run.exit_code == 3
+    assert "retries must be positive" in run.error["message"]
+
+
 def test_project_file_selects_profile(invoke, memory_keyring, site, tmp_path):
     _add(invoke, "blog")
     _add(invoke, "other", password="other-pw")

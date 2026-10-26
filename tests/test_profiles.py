@@ -37,6 +37,14 @@ def test_default_config_path_home(monkeypatch, tmp_path):
         ({"auth": "digest"}, "auth must be one of"),
         ({"secret": "vault"}, "secret must be one of"),
         ({"secret": "command"}, "secret_command is required"),
+        ({"verify": ""}, "verify must be true, false or a CA bundle path"),
+        ({"verify": 1}, "verify must be true, false or a CA bundle path"),
+        ({"timeout": 0}, "timeout must be positive"),
+        ({"timeout": "60"}, "timeout must be a number"),
+        ({"retries": -1}, "retries must be positive"),
+        ({"retries": 1.5}, "retries must be a whole number"),
+        ({"retries": True}, "retries must be a number"),
+        ({"backoff": -0.5}, "backoff must be positive"),
     ],
 )
 def test_profile_validation(kwargs, message):
@@ -104,9 +112,85 @@ def test_profile_client_settings(monkeypatch, kwargs, expected):
         "api_prefix": "++api++",
         "timeout": 30.0,
         "verify": True,
+        "retries": 3,
+        "backoff": 0.5,
         "read_only": False,
     }
     assert profile.client_settings() == {**base, **expected}
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("true", True),
+        (" YES ", True),
+        ("1", True),
+        ("off", False),
+        ("0", False),
+        ("/etc/ssl/ca.pem", "/etc/ssl/ca.pem"),
+        ("~/ca.pem", "~/ca.pem"),
+    ],
+)
+def test_parse_verify(value, expected):
+    assert profiles.parse_verify(value) == expected
+
+
+def test_parse_verify_empty():
+    with pytest.raises(PloneConfigurationError, match="verify must be"):
+        profiles.parse_verify(" ")
+
+
+def test_config_defaults_apply_to_profiles(tmp_path):
+    config = Config(
+        tmp_path / "config.toml",
+        {
+            "defaults": {"timeout": 60, "retries": 5, "verify": "/etc/ssl/ca.pem"},
+            "profiles": {
+                "blog": {"url": "https://example.org"},
+                "local": {"url": "http://localhost:8080/Plone", "verify": False},
+            },
+        },
+    )
+    blog, local = config.get("blog"), config.get("local")
+    assert (blog.timeout, blog.retries, blog.verify) == (60, 5, "/etc/ssl/ca.pem")
+    assert (local.timeout, local.verify) == (60, False)
+    assert config.to_mapping()["profiles"] == {
+        "blog": {"url": "https://example.org"},
+        "local": {"url": "http://localhost:8080/Plone", "verify": False},
+    }
+
+
+@pytest.mark.parametrize(
+    "defaults,message",
+    [
+        ({"username": "admin"}, "defaults: unknown keys username"),
+        ({"timeout": 0}, "defaults: timeout must be positive"),
+    ],
+)
+def test_config_defaults_validation(tmp_path, defaults, message):
+    with pytest.raises(PloneConfigurationError, match=message):
+        Config(tmp_path / "config.toml", {"defaults": defaults})
+
+
+def test_config_set_defaults_moves_inherited_values(tmp_path):
+    config = Config(
+        tmp_path / "config.toml",
+        {
+            "defaults": {"timeout": 60},
+            "profiles": {
+                "blog": {"url": "https://example.org"},
+                "slow": {"url": "https://slow.example.org", "timeout": 120},
+            },
+        },
+    )
+    config.set_defaults({"timeout": 90, "retries": 1})
+    assert config.get("blog").timeout == 90
+    assert config.get("slow").timeout == 120
+    assert config.get("slow").retries == 1
+    config.set_defaults({"timeout": None})
+    assert config.defaults == {"retries": 1}
+    assert config.get("blog").timeout == 30.0
+    assert config.to_mapping()["profiles"]["blog"] == {"url": "https://example.org"}
 
 
 def test_config_add_use_remove(tmp_path):
@@ -188,6 +272,8 @@ def test_settings_from_env():
             "PC_API_PREFIX": "",
             "PC_TIMEOUT": "10",
             "PC_VERIFY": "false",
+            "PC_RETRIES": "5",
+            "PC_BACKOFF": "1.5",
             "PC_READ_ONLY": "yes",
         },
         prefix="PC_",
@@ -201,15 +287,29 @@ def test_settings_from_env():
         "api_prefix": "",
         "timeout": 10.0,
         "verify": False,
+        "retries": 5,
+        "backoff": 1.5,
         "read_only": True,
     }
+
+
+def test_settings_from_env_ca_bundle():
+    settings = profiles.settings_from_env({
+        "PLONE_CLIENT_URL": "u",
+        "PLONE_CLIENT_VERIFY": "/etc/ssl/ca.pem",
+    })
+    assert settings["verify"] == "/etc/ssl/ca.pem"
+
+
+@pytest.mark.parametrize("name", ["TIMEOUT", "RETRIES", "BACKOFF"])
+def test_settings_from_env_numbers(name):
+    with pytest.raises(PloneConfigurationError, match=f"{name} must be a number"):
+        profiles.settings_from_env({
+            "PLONE_CLIENT_URL": "u",
+            f"PLONE_CLIENT_{name}": "x",
+        })
 
 
 def test_settings_from_env_errors():
     with pytest.raises(PloneConfigurationError, match="Set PLONE_CLIENT_URL"):
         profiles.settings_from_env({})
-    with pytest.raises(PloneConfigurationError, match="TIMEOUT must be a number"):
-        profiles.settings_from_env({
-            "PLONE_CLIENT_URL": "u",
-            "PLONE_CLIENT_TIMEOUT": "x",
-        })
