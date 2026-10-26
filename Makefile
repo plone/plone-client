@@ -10,7 +10,14 @@ MAKEFLAGS+=--no-builtin-rules
 .DEFAULT_GOAL := help
 
 SRC := src/plone_client
+CODE := src tests docs/_examples
 UV ?= uv
+
+DOCS_DIR := docs
+DOCS_BUILDDIR := $(DOCS_DIR)/_build
+DOCS_SPHINXOPTS ?=
+DOCS_VALEOPTS ?=
+DOCS_VALEFILES = $(shell find $(DOCS_DIR) -type f -name "*.md" -not -path "$(DOCS_BUILDDIR)/*" -not -path "$(DOCS_DIR)/_styles/*" -print)
 
 # installed?
 ifeq (, $(shell which $(UV) ))
@@ -44,14 +51,14 @@ clean: ## Remove the environment and generated files
 .PHONY: format
 format: install ## Format the code base
 	@echo -e "$(GREEN)==> Format codebase$(RESET)"
-	@uvx ruff@latest check --select I --fix --config pyproject.toml src tests
-	@uvx ruff@latest format --config pyproject.toml src tests
+	@uvx ruff@latest check --select I --fix --config pyproject.toml $(CODE)
+	@uvx ruff@latest format --config pyproject.toml $(CODE)
 
 .PHONY: lint
 lint: install ## Check the code base; changes nothing
 	@echo -e "$(GREEN)==> Lint codebase$(RESET)"
-	@uvx ruff@latest check --no-fix --config pyproject.toml src tests
-	@uvx ruff@latest format --check --config pyproject.toml src tests
+	@uvx ruff@latest check --no-fix --config pyproject.toml $(CODE)
+	@uvx ruff@latest format --check --config pyproject.toml $(CODE)
 	@uvx pyroma@latest -d .
 	@uvx check-python-versions@latest .
 	@$(UV) run mypy $(SRC)
@@ -80,8 +87,30 @@ test-integration: install ## Run the integration tests against Plone in Docker (
 # Docs and changelog
 ############################################
 .PHONY: docs
-docs: ## Build the documentation
-	@$(UV) run --group docs sphinx-build -W -b html docs docs/_build/html
+docs: ## Build the documentation (warnings are errors)
+	@echo -e "$(GREEN)==> Build documentation$(RESET)"
+	@$(UV) run --group docs sphinx-build -W --keep-going -b html $(DOCS_DIR) "$(DOCS_BUILDDIR)/html" $(DOCS_SPHINXOPTS)
+
+.PHONY: docs-livehtml
+docs-livehtml: ## Rebuild the documentation on changes, with live reload in the browser
+	@$(UV) run --group docs sphinx-autobuild --ignore "*.swp" --port 8050 \
+		-b html $(DOCS_DIR) "$(DOCS_BUILDDIR)/html" $(DOCS_SPHINXOPTS)
+
+.PHONY: docs-linkcheck
+docs-linkcheck: ## Check that all links in the documentation resolve
+	@echo -e "$(GREEN)==> Check documentation links$(RESET)"
+	@$(UV) run --group docs sphinx-build -b linkcheck $(DOCS_DIR) "$(DOCS_BUILDDIR)/linkcheck"
+
+.PHONY: docs-vale
+docs-vale: ## Check the documentation with Vale
+	@echo -e "$(GREEN)==> Check documentation with Vale$(RESET)"
+	@$(UV) run --group docs vale sync
+	@$(UV) run --group docs vale --no-wrap $(DOCS_VALEOPTS) $(DOCS_VALEFILES)
+
+.PHONY: docs-clean
+docs-clean: ## Remove the built documentation
+	@echo -e "$(RED)==> Clean documentation$(RESET)"
+	@rm -rf "$(DOCS_BUILDDIR)"
 
 .PHONY: changelog
 changelog: ## Preview the next change log entry

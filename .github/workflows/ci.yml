@@ -81,6 +81,14 @@ jobs:
           PLONE_IMAGE: ${{ matrix.image }}
         run: make test-integration
 
+  docs:
+    name: "Documentation"
+    uses: ./.github/workflows/docs.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
   build:
     name: "Build distribution"
     runs-on: ubuntu-latest

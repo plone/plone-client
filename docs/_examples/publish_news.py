@@ -11,15 +11,15 @@ and does whichever the site expects.
 
 Usage::
 
-    python examples/publish_news.py news.txt /news --image lead.jpg
-    python examples/publish_news.py news.txt /news --image lead.jpg --apply
+    python docs/_examples/publish_news.py news.txt /news --image lead.jpg
+    python docs/_examples/publish_news.py news.txt /news --image lead.jpg --apply
 """
 
 from pathlib import Path
-from plone_client import PloneClient
-from plone_client import PloneClientError
 from plone_client import blocks
 from plone_client import file_data
+from plone_client import PloneClient
+from plone_client import PloneClientError
 from typing import Any
 
 import argparse

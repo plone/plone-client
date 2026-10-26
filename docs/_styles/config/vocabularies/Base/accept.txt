@@ -1,0 +1,13 @@
+plone-client
+httpx
+[Kk]eyring
+[Hh]ttpie
+JWT(s)?
+TOML
+TUS
+UID(s)?
+[Dd]ry run
+[Rr]eindex(es|ed|ing)?
+Diátaxis
+MCP
+pipx

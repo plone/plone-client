@@ -22,6 +22,8 @@ make test               # unit tests
 make test-coverage      # unit tests with a coverage report
 make test-integration   # integration tests against plone/plone-backend in Docker
 make docs               # build the documentation; warnings are errors
+make docs-vale          # check the documentation's style with Vale
+make docs-livehtml      # rebuild the documentation as you edit it
 ```
 
 Unit tests never touch the network.
@@ -40,7 +42,13 @@ PLONE_IMAGE=plone/plone-backend:6.0 make test-integration
 2. Accept item references through `self._resolve()` or `self._service()`, so paths, URLs and UIDs all work.
 3. Add a case to the table in the matching `tests/managers/` module, checking the method, path, query and body sent.
 4. If people will want it on the command line, add a command in `src/plone_client/cli/` and a test in `tests/cli/`.
-5. Document it in `docs/`.
+5. Add it to the table in `docs/reference/managers.md`, and to `docs/reference/compatibility.md` if it needs a newer `plone.restapi` than Plone 6.0.0 ships.
+
+## Write documentation
+
+The documentation follows the [Plone documentation style guide](https://6.docs.plone.org/contributing/documentation/index.html) and the [Diátaxis](https://diataxis.fr/) framework: tutorials, how-to guides, reference, and explanation each have their own folder in `docs/`.
+Write one sentence per line.
+Example scripts live in `docs/_examples/`, are included in the pages with `literalinclude`, and are checked by `make lint`.
 
 Docstrings use reStructuredText field lists: `:param:`, `:returns:` and `:raises:`.
 

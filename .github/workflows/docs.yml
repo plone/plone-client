@@ -1,0 +1,72 @@
+name: Documentation
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        required: false
+        default: "3.13"
+      check-links:
+        type: boolean
+        default: false
+      check-vale:
+        type: boolean
+        default: true
+    outputs:
+      url:
+        description: "URL of the deployed documentation"
+        value: ${{ jobs.deploy.outputs.url }}
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+        with:
+          python-version: ${{ inputs.python-version }}
+          enable-cache: true
+
+      - name: Build HTML documentation
+        run: make docs
+
+      - name: Check for broken links
+        if: ${{ inputs.check-links }}
+        run: make docs-linkcheck
+
+      - name: Check with Vale
+        if: ${{ inputs.check-vale }}
+        run: make docs-vale DOCS_VALEOPTS="--minAlertLevel=error"
+
+      - name: Upload static files as artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/_build/html/
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs:
+      - build
+    outputs:
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Queue deployments: Pages refuses a new one while another is in
+    # progress. A newer pending run replaces an older one.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -14,15 +14,15 @@ The records file holds a list of objects::
 
 Usage::
 
-    python examples/sync_json.py records.json /news/releases
-    python examples/sync_json.py records.json /news/releases --apply --prune
-    python examples/sync_json.py records.json /news/releases --profile local --apply
+    python docs/_examples/sync_json.py records.json /news/releases
+    python docs/_examples/sync_json.py records.json /news/releases --apply --prune
+    python docs/_examples/sync_json.py records.json /news --profile local --apply
 """
 
 from pathlib import Path
+from plone_client import blocks
 from plone_client import PloneClient
 from plone_client import PloneClientError
-from plone_client import blocks
 from typing import Any
 
 import argparse
@@ -84,7 +84,9 @@ def sync(
     for record in records:
         entry = existing.pop(record["id"], None)
         if entry is None:
-            client.content.create(folder, "Document", id=record["id"], **page_data(record))
+            client.content.create(
+                folder, "Document", id=record["id"], **page_data(record)
+            )
             print(f"+ {record['id']}")
             counts["created"] += 1
         elif changed(client.content.get(entry["@id"], include_items=False), record):

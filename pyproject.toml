@@ -47,7 +47,7 @@ plone-client = "plone_client.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/plone/plone-client"
-Documentation = "https://github.com/plone/plone-client#readme"
+Documentation = "https://plone.github.io/plone-client"
 Repository = "https://github.com/plone/plone-client"
 Issues = "https://github.com/plone/plone-client/issues"
 Changelog = "https://github.com/plone/plone-client/blob/main/CHANGELOG.md"
@@ -62,10 +62,18 @@ lint = [
     "mypy>=1.13.0",
 ]
 docs = [
-    "furo>=2024.8.6",
+    "linkify-it-py>=2.0.3",
     "myst-parser>=4.0.0",
+    "packaging>=24.0",
+    "plone-sphinx-theme>=1.4.3",
     "sphinx>=8.0.0",
+    "sphinx-autobuild>=2024.10.3",
     "sphinx-copybutton>=0.5.2",
+    "sphinx-design>=0.6.1",
+    "sphinx-notfound-page>=1.0.4",
+    "sphinx-sitemap>=2.6.0",
+    "sphinxext-opengraph>=0.9.1",
+    "vale>=3.9.0",
 ]
 release = [
     "towncrier>=24.8.0",
@@ -177,7 +185,8 @@ preview = true
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501", "RUF001", "S101", "S105", "S106", "S107"]
-"examples/*" = ["E402", "S101", "S106"]
+"docs/_examples/*" = ["E402", "S101", "S106"]
+"docs/conf.py" = ["E402"]
 # "secret" names where a secret is kept (keyring, env…), never a secret itself
 "src/plone_client/profiles.py" = ["S105", "S107"]
 "src/plone_client/credentials.py" = ["S105"]
