@@ -30,38 +30,50 @@ Add a `.plone-client.toml` file at the root of the project.
 profile = "blog-local"
 ```
 
-## Tell the agent how to use it
+## Install the agent skill
 
-Add a section like this one to the project's `CLAUDE.md`, `AGENTS.md`, or equivalent, with your profile names and paths.
+plone-client ships an [Agent Skill](https://agentskills.io/) that teaches an agent its commands, output, exit codes, the Volto content model, and the safety rules: no passwords, a dry run before changes, and no deletion without your confirmation.
 
-````markdown
-## Managing the site's content
+To install it in the project, run this at the project's root.
 
-Use the `plone-client` command line to read and change content on the Plone site.
-Never call the REST API with curl, and never ask for passwords: the profiles already hold them.
+```shell
+plone-client skill install
+```
+
+It writes `.claude/skills/plone-client/SKILL.md`, where Claude Code finds it.
+Commit the file to share it with everyone working on the project.
+
+To install it for every project instead, pass `--user`; it then goes in `~/.claude/skills`.
+
+```shell
+plone-client skill install --user
+```
+
+For an agent that reads skills from another directory, pass it with `--dir`.
+
+```shell
+plone-client skill install --dir .agents/skills
+```
+
+Run `plone-client skill install` again after upgrading plone-client, to replace the skill with the new version.
+To read the skill, or to paste it into an agent without skill support, print it.
+
+```shell
+plone-client skill show
+```
+
+## Tell the agent about your sites
+
+The skill knows the command line, not your sites.
+Add what only you know to the project's `CLAUDE.md`, `AGENTS.md`, or equivalent.
+
+```markdown
+## Plone sites
 
 - Profiles: `blog-local` (local development, the default) and `blog` (production, read-only).
   Pass `-p blog` to read production.
-- Output is JSON. Use `-f` to keep only the keys you need, for example `-f @id,title,review_state`.
-- Before any change on a site other than `blog-local`, run the command with `-n` first and show me the requests.
-- Never pass `--yes` to `delete` without my explicit confirmation of the items to delete.
-- Exit codes: 3 configuration, 4 not allowed or locked, 5 not found, 6 invalid request, 7 read-only, 8 site unreachable, 9 server error.
-- `plone-client types <type>` shows the fields a content type accepts.
-
-Common commands:
-
-```shell
-plone-client ls /blog -f @id,title,review_state
-plone-client search -q "keyword" -t Document --limit 10 -f @id,title
-plone-client get /blog/post -f title,description,subjects,review_state
-plone-client blocks /blog/post
-plone-client create /blog Document --title "Title" --description "Summary"
-plone-client update /blog/post -s subjects:='["plone"]'
-plone-client workflow /blog/post publish
-plone-client upload /blog/post image.png
-plone-client request GET /@service-without-a-command
+- News goes in `/blog`, as `News Item`, published with the `publish` transition.
 ```
-````
 
 ## Related
 

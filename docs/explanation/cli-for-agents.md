@@ -24,6 +24,15 @@ There is nothing to keep running in the background, nothing to configure per age
 When an agent does something unexpected, you can read the exact command in its transcript and run it yourself.
 The same commands also serve shell scripts and CI jobs, so one tool covers all three.
 
+An MCP server still has its place.
+Chat assistants without a terminal can only reach a site through one, and a server can offer operations that group several requests, such as creating an item with its images and setting its lead image in one call.
+
+## Why a skill
+
+An agent that has never seen plone-client learns it from `--help`, one command at a time, and has no way to know the conventions of the site behind it: that Volto sites have no `Folder` type, or that a field a type does not have is silently ignored.
+The agent skill shipped with plone-client gives it all of that at once, together with the rules a careful person would follow: preview a change before making it, and never delete without confirmation.
+The skill is loaded only when a task needs it, so it costs nothing the rest of the time.
+
 ## What makes it safe
 
 An agent should not see passwords, and should not be able to break a production site by accident.

@@ -59,6 +59,7 @@ Options marked "No" must come before the command, because `profile add` has opti
 | `sharing <ref>` | Show the local roles of an item. |
 | `request <method> <ref>` | Send any request, for services without a command. |
 | `profile list`, `show`, `add`, `defaults`, `set-secret`, `use`, `remove`, `test` | Manage connection profiles; `add` and `defaults` take `--timeout`, `--verify` (`true`, `false`, or a CA bundle path), `--retries`, and `--backoff`. |
+| `skill show`, `skill install` | Print the agent skill, or install it in `.claude/skills`; `--user` installs it in `~/.claude/skills`, `--dir` in another skills directory. |
 | `registry list`, `get`, `set` | Read and change registry records. |
 | `users list`, `get`, `create`, `update`, `delete` | Manage users. |
 | `groups list`, `get`, `create`, `add-member`, `remove-member`, `delete` | Manage groups. |
