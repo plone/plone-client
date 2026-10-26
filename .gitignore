@@ -9,6 +9,7 @@ venv/
 .env
 .coverage
 htmlcov/
+docs/_build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

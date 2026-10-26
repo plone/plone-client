@@ -1,0 +1,1 @@
+Moved continuous integration and linting to `uv` and `make` targets, and added the towncrier change log check and Dependabot. @ericof

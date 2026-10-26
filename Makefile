@@ -1,77 +1,88 @@
-.DEFAULT_GOAL := help
-PYTHON        ?= python3
-SRC           := src/plone_client
-TESTS         := tests
+### Defensive settings for make:
+#     https://tech.davis-hansson.com/p/make/
+SHELL:=bash
+.SHELLFLAGS:=-eu -o pipefail -c
+.SILENT:
+.DELETE_ON_ERROR:
+MAKEFLAGS+=--warn-undefined-variables
+MAKEFLAGS+=--no-builtin-rules
 
-# Python checks
-UV?=uv
+.DEFAULT_GOAL := help
+
+SRC := src/plone_client
+UV ?= uv
 
 # installed?
 ifeq (, $(shell which $(UV) ))
   $(error "UV=$(UV) not found in $(PATH)")
 endif
 
-BACKEND_FOLDER=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+GREEN=\033[0;32m
+RED=\033[0;31m
+RESET=\033[0m
 
-VENV_FOLDER=$(BACKEND_FOLDER)/.venv
-BIN_FOLDER=$(VENV_FOLDER)/bin
-
-all: build
-
-# Add the following 'help' target to your Makefile
-# And add help text after each target name starting with '\#\#'
 .PHONY: help
 help: ## This help message
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-$(VENV_FOLDER): ## Install dependencies
-	@echo "$(GREEN)==> Install environment$(RESET)"
-	@uv sync
+.venv/bin/python: pyproject.toml
+	@echo -e "$(GREEN)==> Install environment$(RESET)"
+	@$(UV) sync --all-extras
+	@touch .venv/bin/python
 
 .PHONY: install
-install: $(VENV_FOLDER) ## Install the project
+install: .venv/bin/python ## Install the library, the command line and the development tools
 
 .PHONY: clean
-clean: ## Clean environment
-	@echo "$(RED)==> Cleaning environment and build$(RESET)"
-	rm -rf $(VENV_FOLDER) .python-version .ruff_cache .pytest_cache uv.lock
+clean: ## Remove the environment and generated files
+	@echo -e "$(RED)==> Cleaning environment and build$(RESET)"
+	rm -rf .venv .ruff_cache .pytest_cache .mypy_cache .coverage dist docs/_build
 
 ############################################
 # QA
 ############################################
+.PHONY: format
+format: install ## Format the code base
+	@echo -e "$(GREEN)==> Format codebase$(RESET)"
+	@uvx ruff@latest check --select I --fix --config pyproject.toml src tests
+	@uvx ruff@latest format --config pyproject.toml src tests
+
 .PHONY: lint
-lint: $(VENV_FOLDER) ## Check code base according to our standards
-	@echo "$(GREEN)==> Lint codebase$(RESET)"
-	@uvx ruff@latest check --fix --config $(BACKEND_FOLDER)/pyproject.toml
+lint: install ## Check the code base; changes nothing
+	@echo -e "$(GREEN)==> Lint codebase$(RESET)"
+	@uvx ruff@latest check --no-fix --config pyproject.toml src tests
+	@uvx ruff@latest format --check --config pyproject.toml src tests
 	@uvx pyroma@latest -d .
 	@uvx check-python-versions@latest .
-	@uv run mypy $(SRC)
-
-.PHONY: format
-format: $(VENV_FOLDER) ## Fix code base according to our standards
-	@echo "$(GREEN)==> Format codebase$(RESET)"
-	@uvx ruff@latest check --select I --fix --config $(BACKEND_FOLDER)/pyproject.toml
-	@uvx ruff@latest format --config $(BACKEND_FOLDER)/pyproject.toml
+	@$(UV) run mypy $(SRC)
 
 .PHONY: check
-check: format lint ## Check and fix code base according to Plone standards
+check: format lint ## Format, then check the code base
 
 ############################################
 # Tests
 ############################################
 .PHONY: test
-test: $(VENV_FOLDER) ## Test the code with pytest
-	@echo "🚀 Testing code: Running pytest"
-	@uv run pytest
+test: install ## Run the unit tests
+	@echo -e "$(GREEN)==> Unit tests$(RESET)"
+	@$(UV) run pytest
 
 .PHONY: test-coverage
-test-coverage: $(VENV_FOLDER) ## Test the code with pytest
-	@echo "🚀 Testing code: Running pytest"
-	@uv run pytest --cov=plone_client --cov-report term-missing
+test-coverage: install ## Run the unit tests with a coverage report
+	@$(UV) run pytest --cov=plone_client --cov-report=term-missing
 
-# ------------------------------------------------------------------
-# Docs
-# ------------------------------------------------------------------
+.PHONY: test-integration
+test-integration: install ## Run the integration tests against Plone in Docker (PLONE_IMAGE=…)
+	@echo -e "$(GREEN)==> Integration tests$(RESET)"
+	@$(UV) run pytest -m integration tests/integration
 
-docs:  ## Build Sphinx docs (requires docs/conf.py)
-	$(MAKE) -C docs html
+############################################
+# Docs and changelog
+############################################
+.PHONY: docs
+docs: ## Build the documentation
+	@$(UV) run --group docs sphinx-build -W -b html docs docs/_build/html
+
+.PHONY: changelog
+changelog: ## Preview the next change log entry
+	@uvx towncrier build --draft --version=next

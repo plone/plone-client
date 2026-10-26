@@ -2,120 +2,95 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ── Lint & type-check ────────────────────────────────────────────────────
-  quality:
-    name: Lint & types (Python ${{ matrix.python-version }})
+  lint:
+    name: "Lint"
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
+          python-version: "3.13"
+          enable-cache: true
 
-      - name: Install dev dependencies
-        run: pip install -e ".[dev,async]"
+      - name: Install
+        run: make install
 
-      - name: Ruff lint
-        run: ruff check src tests
+      - name: Lint
+        run: make lint
 
-      - name: Ruff format check
-        run: ruff format --check src tests
-
-      - name: Mypy
-        run: mypy src/plone_client
-
-  # ── Unit tests ───────────────────────────────────────────────────────────
-  unit:
-    name: Unit tests (Python ${{ matrix.python-version }})
+  test:
+    name: "Test: Python ${{ matrix.python-version }} on ${{ matrix.os }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: macos-latest
+            python-version: "3.13"
+          - os: windows-latest
+            python-version: "3.13"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
+          enable-cache: true
 
-      - name: Install
-        run: pip install -e ".[dev,async]"
+      - name: Test
+        run: uv run --all-extras pytest --cov=plone_client --cov-report=term-missing
 
-      - name: Run unit tests
-        run: pytest -m unit --cov=plone_client --cov-report=xml -v
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: coverage.xml
-          fail_ci_if_error: false
-
-  # ── Integration tests (Docker) ───────────────────────────────────────────
   integration:
-    name: Integration (Plone ${{ matrix.plone-version }})
+    name: "Integration: ${{ matrix.image }}"
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
-        plone-version: ["6", "6.1"]
+        image: ["plone/plone-backend:6.1", "plone/plone-backend:6.0"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
         with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install
-        run: pip install -e ".[dev]"
+          python-version: "3.13"
+          enable-cache: true
 
       - name: Run integration tests
         env:
-          PLONE_DOCKER_IMAGE: plone/plone-backend:${{ matrix.plone-version }}
-        run: pytest -m integration -v --timeout=180
+          PLONE_IMAGE: ${{ matrix.image }}
+        run: make test-integration
 
-  # ── Build check ──────────────────────────────────────────────────────────
   build:
-    name: Build distribution
+    name: "Build distribution"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Build
-        run: |
-          pip install build
-          python -m build
+        run: uv build
 
-      - name: Check dist
-        run: |
-          pip install twine
-          twine check dist/*
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
+      - name: Check metadata
+        run: uvx twine check dist/*
