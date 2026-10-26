@@ -63,7 +63,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ["plone/plone-backend:6.1", "plone/plone-backend:6.0"]
+        image:
+          - "plone/plone-backend:6.2"
+          - "plone/plone-backend:6.1"
+          - "plone/plone-backend:6.0"
     steps:
       - uses: actions/checkout@v7
 
