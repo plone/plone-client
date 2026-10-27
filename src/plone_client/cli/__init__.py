@@ -4,6 +4,8 @@ Needs the ``cli`` extra: ``pip install 'plone-client[cli]'``.
 """
 
 from . import content
+from . import mcp
+from . import operations
 from . import panels
 from . import profile
 from . import site
@@ -15,7 +17,7 @@ from typing import TextIO
 import sys
 
 
-for module in (content, site):
+for module in (content, operations, site, mcp):
     app.registered_commands.extend(module.commands.registered_commands)
 app.add_typer(site.users_app, name="users", rich_help_panel=panels.SITE)
 app.add_typer(site.groups_app, name="groups", rich_help_panel=panels.SITE)

@@ -96,6 +96,10 @@ def test_profile_anonymous(kwargs, anonymous):
             {"username": "editor", "password": "s3cret", "auth_method": "jwt"},
         ),
         ({"auth": "token"}, {"token": "s3cret"}),
+        (
+            {"frontend_url": "https://www.example.org/"},
+            {"frontend_url": "https://www.example.org"},
+        ),
     ],
 )
 def test_profile_client_settings(monkeypatch, kwargs, expected):
@@ -275,6 +279,7 @@ def test_settings_from_env():
             "PC_RETRIES": "5",
             "PC_BACKOFF": "1.5",
             "PC_READ_ONLY": "yes",
+            "PC_FRONTEND_URL": "https://www.example.org",
         },
         prefix="PC_",
     )
@@ -283,6 +288,7 @@ def test_settings_from_env():
         "username": "editor",
         "password": " pw ",
         "token": "",
+        "frontend_url": "https://www.example.org",
         "auth_method": "jwt",
         "api_prefix": "",
         "timeout": 10.0,
@@ -313,3 +319,46 @@ def test_settings_from_env_numbers(name):
 def test_settings_from_env_errors():
     with pytest.raises(PloneConfigurationError, match="Set PLONE_CLIENT_URL"):
         profiles.settings_from_env({})
+
+
+def test_config_groups(tmp_path):
+    path = tmp_path / "config.toml"
+    config = Config(path)
+    for name in ("a", "b", "c"):
+        config.add(Profile(name=name, url=f"https://{name}.example.org"))
+    assert config.set_group("sites", ["b", "a", "b"]) == ["b", "a"]
+    assert [p.name for p in config.group("sites")] == ["b", "a"]
+    config.set_group("solo", ["a"])
+    config.save()
+    loaded = profiles.load_config(path)
+    assert loaded.groups == {"sites": ["b", "a"], "solo": ["a"]}
+    assert loaded.to_mapping() == config.to_mapping()
+    # removing a profile drops it from its groups, and empty groups go
+    config.remove("a")
+    assert config.groups == {"sites": ["b"]}
+    assert config.remove_group("sites") == ["b"]
+    assert config.groups == {}
+    with pytest.raises(PloneConfigurationError, match=r"Unknown group 'x'.*none"):
+        config.group("x")
+
+
+@pytest.mark.parametrize(
+    "name,members,message",
+    [
+        ("bad name", ["a"], "Invalid group name"),
+        ("g", "a", "must be a list"),
+        ("g", 3, "must be a list"),
+        ("g", [], "has no profiles"),
+        ("g", ["a", "zz"], "unknown profiles zz"),
+    ],
+)
+def test_config_group_validation(tmp_path, name, members, message):
+    config = Config(tmp_path / "config.toml")
+    config.add(Profile(name="a", url="https://a.example.org"))
+    with pytest.raises(PloneConfigurationError, match=message):
+        config.set_group(name, members)
+
+
+def test_config_groups_must_be_a_table(tmp_path):
+    with pytest.raises(PloneConfigurationError, match="groups must be a table"):
+        Config(tmp_path / "config.toml", {"groups": ["a"]})

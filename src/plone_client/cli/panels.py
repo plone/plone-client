@@ -30,6 +30,8 @@ ROOT_ORDER: tuple[str, ...] = (
     "sharing",
     # Content — change
     "create",
+    "create-page",
+    "create-with-files",
     "update",
     "workflow",
     "copy",
@@ -38,9 +40,11 @@ ROOT_ORDER: tuple[str, ...] = (
     "delete",
     # Content — files
     "upload",
+    "upload-tree",
     "download",
     # Site
     "types",
+    "block-types",
     "vocabulary",
     "users",
     "groups",
@@ -48,6 +52,7 @@ ROOT_ORDER: tuple[str, ...] = (
     "aliases",
     # Advanced
     "request",
+    "mcp",
     # Configuration
     "info",
     "profile",

@@ -12,6 +12,11 @@ myst:
 
 This guide shows you how to create a news item with blocks and a lead image, and publish it.
 
+```{tip}
+{func}`~plone_client.operations.create_with_files` does all of this in one call, and picks the lead image field from the schema; see {ref}`howto-operations`.
+This guide shows the steps it takes.
+```
+
 ## Build the blocks
 
 {mod}`plone_client.blocks` builds the `blocks` and `blocks_layout` fields of a Volto page.

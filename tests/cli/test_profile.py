@@ -39,6 +39,14 @@ def test_add_stores_secret_in_keyring(invoke, memory_keyring, config_file):
     assert load_config(config_file).current == "blog"
 
 
+def test_add_with_frontend_url(invoke, memory_keyring, config_file):
+    run = _add(invoke, "local", "--frontend-url", "http://localhost:3000/")
+    assert run.exit_code == 0, run.stderr
+    assert run.json["frontend_url"] == "http://localhost:3000"
+    profile = load_config(config_file).get("local")
+    assert profile.client_settings()["frontend_url"] == "http://localhost:3000"
+
+
 def test_profile_is_used_for_requests(invoke, memory_keyring, site):
     _add(invoke)
     invoke("get", "/")
@@ -195,3 +203,28 @@ def test_test_command_with_wrong_credentials(invoke, memory_keyring, site):
     assert run.json["authenticated"] is False
     assert run.json["username"] is None
     assert run.json["plone_version"] is None
+
+
+def test_group_commands(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    _add(invoke, "docs")
+    assert invoke("profile", "group-set", "sites", "docs", "blog").json == {
+        "name": "sites",
+        "profiles": ["docs", "blog"],
+    }
+    assert invoke("profile", "groups").json == [
+        {"name": "sites", "profiles": ["docs", "blog"]}
+    ]
+    assert load_config(config_file).groups == {"sites": ["docs", "blog"]}
+    assert invoke("profile", "group-remove", "sites").json == {
+        "removed": "sites",
+        "profiles": ["docs", "blog"],
+    }
+    assert invoke("profile", "groups").json == []
+
+
+def test_group_set_unknown_profile(invoke, memory_keyring):
+    _add(invoke, "blog")
+    run = invoke("profile", "group-set", "sites", "blog", "nope")
+    assert run.exit_code == 3
+    assert "unknown profiles nope" in run.error["message"]

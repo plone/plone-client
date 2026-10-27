@@ -21,6 +21,7 @@
   Use it to sync content from an external source, to migrate content, or to automate site maintenance.
 - **As a command line client**, `plone-client` manages any number of Plone sites, each one a named profile whose password stays in your operating system's keyring.
   It prints JSON and uses stable exit codes, so shell scripts and coding agents can use it as well as people.
+- **As an MCP server**, `plone-client mcp` gives chat assistants the everyday reads and operations that take several requests, such as creating a page from Markdown or a news item with its images.
 
 It works with Plone 6.0, 6.1, and 6.2, and needs Python 3.11 or later.
 See the [compatibility grid](https://plone.github.io/plone-client/reference/compatibility.html) for the `plone.restapi` versions.
@@ -30,6 +31,7 @@ See the [compatibility grid](https://plone.github.io/plone-client/reference/comp
 ```shell
 uv add plone-client                    # the library
 uv tool install "plone-client[cli]"    # the command line
+uv tool install "plone-client[mcp,markdown]"  # the MCP server, with Markdown pages
 ```
 
 ## Use the library

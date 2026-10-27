@@ -73,6 +73,8 @@ nitpicky = True
 nitpick_ignore_regex = [
     ("py:class", r"httpx\..*"),
     ("py:mod", r"httpx|keyring"),
+    # The MCP SDK publishes no Sphinx inventory.
+    ("py:class", r"mcp\..*"),
 ]
 
 # -- Link checking ----------------------------------------------------------

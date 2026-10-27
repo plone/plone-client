@@ -31,6 +31,22 @@ class PloneTimeoutError(PloneConnectionError):
     """The site did not answer in time."""
 
 
+class PloneOperationError(PloneClientError):
+    """An operation of several requests stopped part way.
+
+    The error that stopped it is the ``__cause__``.
+
+    :param message: What failed.
+    :param result: What the operation did before it stopped: the items it
+        created or changed and every request it sent, so a caller can clean
+        up or resume (see :class:`~plone_client.operations.OperationResult`).
+    """
+
+    def __init__(self, message: str, result: Any) -> None:
+        super().__init__(message)
+        self.result = result
+
+
 class PloneAPIError(PloneClientError):
     """The site answered with an error status.
 
@@ -129,6 +145,23 @@ def _error_details(body: Any, default: str) -> tuple[str, str]:
     if isinstance(body, str) and body.strip():
         return body.strip()[:500], ""
     return default, ""
+
+
+def error_payload(error: PloneClientError) -> dict[str, Any]:
+    """JSON description of an error, as the command line and MCP server report it.
+
+    :param error: The error.
+    :returns: ``{"error": {...}}`` with the type and message, and the status
+        code and URL for errors answered by the site. For an operation that
+        stopped part way, ``error`` describes the request that failed and
+        ``result`` what the operation had done.
+    """
+    cause = error.__cause__
+    if isinstance(error, PloneOperationError) and isinstance(cause, PloneClientError):
+        return {**error_payload(cause), "result": error.result.to_dict()}
+    if isinstance(error, PloneAPIError):
+        return {"error": error.to_dict()}
+    return {"error": {"type": error.__class__.__name__, "message": str(error)}}
 
 
 def error_from_response(response: httpx.Response) -> PloneAPIError:

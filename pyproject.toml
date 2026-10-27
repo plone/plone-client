@@ -41,6 +41,14 @@ cli = [
     "tomlkit>=0.13.0",
     "typer>=0.15.0",
 ]
+# collective.html2blocks needs Python 3.12; on 3.11 the conversion is refused
+markdown = [
+    "collective.html2blocks>=1.0.0a9; python_version >= '3.12'",
+]
+mcp = [
+    "plone-client[cli]",
+    "mcp>=2.3.0",
+]
 
 [project.scripts]
 plone-client = "plone_client.cli:main"
@@ -203,6 +211,11 @@ warn_return_any = false
 
 [[tool.mypy.overrides]]
 module = ["keyring.*"]
+ignore_missing_imports = true
+
+# collective.html2blocks is optional and not installed on Python 3.11.
+[[tool.mypy.overrides]]
+module = ["collective.html2blocks.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

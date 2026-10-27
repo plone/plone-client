@@ -70,6 +70,21 @@ plone-client --version
 
 To complete commands in your shell, run `plone-client --install-completion`.
 
+## Add the optional features
+
+Two more extras add optional features.
+
+| Extra | Adds | Needs |
+|---|---|---|
+| `markdown` | Pages from Markdown or HTML, converted to blocks by `collective.html2blocks`. | Python 3.12 or later; on 3.11 it installs nothing. |
+| `mcp` | The MCP server, `plone-client mcp`, with the command line it runs in. | |
+
+Combine extras as you need them.
+
+```shell
+uv tool install "plone-client[mcp,markdown]"
+```
+
 ## Use both
 
 If your code reads the profiles of the command line with {meth}`~plone_client.PloneClient.from_profile`, add the extra to your project's dependencies too.

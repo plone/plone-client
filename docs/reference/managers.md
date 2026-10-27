@@ -34,6 +34,7 @@ Each {class}`~plone_client.PloneClient` has one manager per group of `plone.rest
 | `groups` | {class}`~plone_client.managers.users.GroupsManager` | `@groups` |
 | `sharing` | {class}`~plone_client.managers.users.SharingManager` | `@sharing`, `@principals`, `@roles` |
 | `types` | {class}`~plone_client.managers.types.TypesManager` | `@types` |
+| `block_types` | {class}`~plone_client.managers.block_types.BlockTypesManager` | `@blocks-schema` of the Volto server, at `frontend_url` |
 | `vocabularies` | {class}`~plone_client.managers.types.VocabulariesManager` | `@vocabularies`, `@sources`, `@querysources` |
 | `registry` | {class}`~plone_client.managers.site.RegistryManager` | `@registry` |
 | `controlpanels` | {class}`~plone_client.managers.site.ControlpanelsManager` | `@controlpanels` |
@@ -55,6 +56,31 @@ Every method that takes an item accepts any of these forms.
 A UID reference costs one extra `@search` request.
 A URL outside the site raises {class}`ValueError`.
 
+(reference-managers-block-types)=
+
+## Block types
+
+`client.block_types` asks the `@blocks-schema` service of the Volto server, which lists the blocks a site offers with their documentation, data schema, and variations.
+Volto serves it, not `plone.restapi`, so the request goes to the client's `frontend_url`, without `++api++`, and with a Bearer token.
+A client that uses basic authentication gets the token from `@login` once.
+
+When the site cannot answer, the manager describes Volto's core blocks instead, from documentation that ships with plone-client.
+Its answer then has `"source": "builtin"`, a `warning` that says why, and no `schema`.
+
+| Situation | Answer |
+|---|---|
+| The service answers | The site's own answer, with `"source": "site"`. |
+| `frontend_url` serves an HTML page, as a Volto without the service does | Builtin. |
+| `frontend_url` answers `404`, as the backend does | Builtin. |
+| `frontend_url` cannot be reached | Builtin. |
+| The client is anonymous, and the service answers `401` | Builtin. |
+| The service refuses the token with `401` | {class}`~plone_client.exceptions.PloneAuthenticationError` |
+| The service answers `404` for one block, but lists blocks | {class}`~plone_client.exceptions.PloneNotFoundError` |
+| A builtin answer for a block that is not a core block | {class}`~plone_client.exceptions.PloneNotFoundError` |
+
+The core blocks are `slate`, `title`, `description`, `image`, `teaser`, `listing`, `gridBlock`, `search`, `video`, `maps`, `html`, `toc`, and `detachedSlate`.
+Their documentation comes from Volto, under the MIT license.
+
 ## Classes
 
 ```{eval-rst}
@@ -67,6 +93,7 @@ A URL outside the site raises {class}`ValueError`.
 .. automodule:: plone_client.managers.discussion
 .. automodule:: plone_client.managers.users
 .. automodule:: plone_client.managers.types
+.. automodule:: plone_client.managers.block_types
 .. automodule:: plone_client.managers.site
 ```
 

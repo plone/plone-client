@@ -1,8 +1,8 @@
 ---
 myst:
   html_meta:
-    "description": "How-to guides for plone-client: install, connect, manage profiles, sync content, upload files, and use it from coding agents."
-    "property=og:description": "How-to guides for plone-client: install, connect, manage profiles, sync content, upload files, and use it from coding agents."
+    "description": "How-to guides for plone-client: install, connect, manage profiles, sync content, create content in one step, upload files, and connect coding agents and assistants."
+    "property=og:description": "How-to guides for plone-client: install, connect, manage profiles, sync content, create content in one step, upload files, and connect coding agents and assistants."
     "property=og:title": "How-to guides"
 ---
 
@@ -28,7 +28,9 @@ manage-profiles
 :maxdepth: 1
 
 sync-content
+create-content-in-one-step
 publish-a-news-item
+build-any-block
 upload-files
 preview-changes
 handle-errors
@@ -41,5 +43,6 @@ call-other-services
 :maxdepth: 1
 
 use-with-coding-agents
+connect-an-assistant
 replace-a-hand-written-client
 ```

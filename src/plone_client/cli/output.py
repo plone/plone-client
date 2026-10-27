@@ -5,7 +5,7 @@ Every command prints JSON on standard output, so its result can be read by
 with an exit code that says what kind of error it was (:data:`EXIT_CODES`).
 """
 
-from ..exceptions import PloneAPIError
+from ..exceptions import error_payload
 from ..exceptions import PloneAuthenticationError
 from ..exceptions import PloneBadRequestError
 from ..exceptions import PloneClientError
@@ -14,6 +14,7 @@ from ..exceptions import PloneConflictError
 from ..exceptions import PloneConnectionError
 from ..exceptions import PloneForbiddenError
 from ..exceptions import PloneNotFoundError
+from ..exceptions import PloneOperationError
 from ..exceptions import PloneReadOnlyError
 from ..exceptions import PloneServerError
 from .panels import ROOT_ORDER
@@ -49,26 +50,18 @@ SUMMARY_FIELDS = ("@id", "@type", "UID", "id", "title", "review_state")
 def exit_code(error: PloneClientError) -> int:
     """Exit code for an error.
 
-    :param error: The error.
+    :param error: The error; for an operation that stopped part way, the
+        error that stopped it decides.
     :returns: The code from :data:`EXIT_CODES`, or ``1``.
     """
+    if isinstance(error, PloneOperationError) and isinstance(
+        error.__cause__, PloneClientError
+    ):
+        error = error.__cause__
     for error_class, code in EXIT_CODES:
         if isinstance(error, error_class):
             return code
     return 1
-
-
-def error_payload(error: PloneClientError) -> dict[str, Any]:
-    """JSON description of an error.
-
-    :param error: The error.
-    :returns: ``{"error": {...}}``.
-    """
-    if isinstance(error, PloneAPIError):
-        details = error.to_dict()
-    else:
-        details = {"type": error.__class__.__name__, "message": str(error)}
-    return {"error": details}
 
 
 #: Global flags, accepted anywhere on the command line. ``--read-only`` is

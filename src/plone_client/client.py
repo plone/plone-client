@@ -12,6 +12,8 @@ Example::
 
 from .auth import AuthMethod
 from .auth import build_auth
+from .auth import JWTAuth
+from .auth import TokenAuth
 from .exceptions import error_from_response
 from .exceptions import PloneConfigurationError
 from .exceptions import PloneConnectionError
@@ -19,6 +21,7 @@ from .exceptions import PloneReadOnlyError
 from .exceptions import PloneTimeoutError
 from .managers import AddonsManager
 from .managers import AliasesManager
+from .managers import BlockTypesManager
 from .managers import CommentsManager
 from .managers import ContentManager
 from .managers import ContentRulesManager
@@ -41,6 +44,7 @@ from .managers import WorkflowManager
 from .managers import WorkingCopyManager
 from collections.abc import Iterator
 from collections.abc import Mapping
+from contextlib import contextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version
 from pathlib import Path
@@ -183,6 +187,9 @@ class PloneClient:
     :param read_only: Refuse every request that could change the site.
     :param dry_run: Do not send requests that could change the site; log them
         and return a description of what would have been sent instead.
+    :param frontend_url: URL of the Volto frontend, for services that Volto
+        serves itself (``@blocks-schema``); the site URL by default, which is
+        right when ``url`` is the frontend.
     :param transport: Custom :mod:`httpx` transport, mostly for tests.
     """
 
@@ -203,11 +210,13 @@ class PloneClient:
         headers: Mapping[str, str] | None = None,
         read_only: bool = False,
         dry_run: bool = False,
+        frontend_url: str = "",
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         if not url:
             raise ValueError("The URL of the site is required")
         self.url = url.rstrip("/")
+        self.frontend_url = frontend_url.rstrip("/") or self.url
         self.api_prefix = api_prefix.strip("/")
         self.retries = retries
         self.backoff = backoff
@@ -215,6 +224,7 @@ class PloneClient:
         self.dry_run = dry_run
         #: Requests skipped because of ``dry_run``, oldest first.
         self.dry_run_log: list[dict[str, Any]] = []
+        self._recordings: list[list[dict[str, Any]]] = []
         if auth is None:
             auth = build_auth(
                 username=username,
@@ -224,6 +234,8 @@ class PloneClient:
                 login_url=self.api_url("/@login"),
             )
         self.username = username
+        self._password = password
+        self._token = token
         verify = ssl_verify(verify)
         self._http = httpx.Client(
             auth=auth,
@@ -252,6 +264,7 @@ class PloneClient:
         self.groups = GroupsManager(self)
         self.sharing = SharingManager(self)
         self.types = TypesManager(self)
+        self.block_types = BlockTypesManager(self)
         self.vocabularies = VocabulariesManager(self)
         self.registry = RegistryManager(self)
         self.controlpanels = ControlpanelsManager(self)
@@ -269,8 +282,9 @@ class PloneClient:
 
         Reads ``<prefix>URL``, ``<prefix>USERNAME``, ``<prefix>PASSWORD``,
         ``<prefix>TOKEN``, ``<prefix>AUTH_METHOD``, ``<prefix>TIMEOUT``,
-        ``<prefix>VERIFY``, ``<prefix>RETRIES``, ``<prefix>BACKOFF`` and
-        ``<prefix>READ_ONLY``; see :func:`~plone_client.profiles.settings_from_env`.
+        ``<prefix>VERIFY``, ``<prefix>RETRIES``, ``<prefix>BACKOFF``,
+        ``<prefix>READ_ONLY`` and ``<prefix>FRONTEND_URL``; see
+        :func:`~plone_client.profiles.settings_from_env`.
 
         :param prefix: Prefix of the variable names.
         :param overrides: Keyword arguments that win over the environment.
@@ -358,8 +372,60 @@ class PloneClient:
         return self.url if path == "/" else f"{self.url}{path}"
 
     # ------------------------------------------------------------------
+    # Authentication
+    # ------------------------------------------------------------------
+
+    def token(self) -> str:
+        """A JWT for the client's user, for services that only take tokens.
+
+        Volto's own services, such as ``@blocks-schema``, read a Bearer
+        token and not basic authentication. A token given to the client is
+        returned as is; otherwise the client logs in with ``@login`` once
+        and keeps the token.
+
+        :returns: The token, or an empty string for an anonymous client.
+        :raises PloneAuthenticationError: If the site refuses the credentials.
+        """
+        auth = self._http.auth
+        if isinstance(auth, TokenAuth):
+            return auth.token
+        if isinstance(auth, JWTAuth) and auth.token:
+            return auth.token
+        if not self._token and self.username and self._password:
+            answer = self.post(
+                "/@login", {"login": self.username, "password": self._password}
+            )
+            self._token = (answer or {}).get("token", "")
+        return self._token
+
+    # ------------------------------------------------------------------
     # Requests
     # ------------------------------------------------------------------
+
+    @contextmanager
+    def recording(self) -> Iterator[list[dict[str, Any]]]:
+        """Record the requests sent, or skipped, inside a ``with`` block.
+
+        Used by :mod:`plone_client.operations` to report every request an
+        operation made. Recordings can be nested.
+
+        :returns: A list that receives one entry per request: ``method``,
+            ``url``, ``status`` and, for skipped requests, ``dry_run``.
+        """
+        entries: list[dict[str, Any]] = []
+        self._recordings.append(entries)
+        try:
+            yield entries
+        finally:
+            self._recordings.remove(entries)
+
+    def _record(self, entry: dict[str, Any]) -> None:
+        """Add a request to the active recordings.
+
+        :param entry: Description of the request.
+        """
+        for entries in self._recordings:
+            entries.append(dict(entry))
 
     def _changes_site(self, method: str, path: str) -> bool:
         """Say whether a request could change the site.
@@ -430,7 +496,47 @@ class PloneClient:
             raise error_from_response(response)
         return response
 
-    def _send(self, request: httpx.Request) -> httpx.Response:
+    def frontend_request(
+        self,
+        method: str,
+        ref: str = "/",
+        *,
+        headers: Mapping[str, str] | None = None,
+        raise_for_status: bool = True,
+    ) -> httpx.Response:
+        """Send a read request to the Volto frontend, with a Bearer token.
+
+        For the services that Volto serves itself rather than
+        ``plone.restapi``, such as ``@blocks-schema``. The request goes to
+        ``frontend_url``, without ``++api++``.
+
+        :param method: ``GET`` or ``HEAD``.
+        :param ref: Site path with the service, or a URL of the frontend.
+        :param headers: Extra headers for this request.
+        :param raise_for_status: Raise
+            :class:`~plone_client.exceptions.PloneAPIError` for error answers.
+        :returns: The response.
+        :raises ValueError: If the method could change the site.
+        """
+        method = method.upper()
+        if method not in SAFE_METHODS:
+            raise ValueError(f"{method} is not allowed on the frontend")
+        if ref.startswith(f"{self.frontend_url}/") or ref == self.frontend_url:
+            ref = ref[len(self.frontend_url) :]
+        path = self.path(ref)
+        url = self.frontend_url if path == "/" else f"{self.frontend_url}{path}"
+        token = self.token()
+        request = self._http.build_request(method, url, headers=headers)
+        response = self._send(request, auth=TokenAuth(token) if token else httpx.Auth())
+        if raise_for_status and response.status_code >= 400:
+            raise error_from_response(response)
+        return response
+
+    def _send(
+        self,
+        request: httpx.Request,
+        auth: httpx.Auth | None = None,
+    ) -> httpx.Response:
         """Send a request, retrying when it is safe to do so.
 
         Connection failures are retried by the transport. Here, idempotent
@@ -438,6 +544,7 @@ class PloneClient:
         or ``504``, honoring ``Retry-After``.
 
         :param request: The request.
+        :param auth: Authentication for this request, instead of the client's.
         :returns: The last response.
         :raises PloneConnectionError: If the site cannot be reached.
         """
@@ -445,7 +552,11 @@ class PloneClient:
         for attempt in range(attempts):
             started = time.monotonic()
             try:
-                response = self._http.send(request)
+                response = (
+                    self._http.send(request)
+                    if auth is None
+                    else self._http.send(request, auth=auth)
+                )
             except httpx.TimeoutException as exc:
                 raise PloneTimeoutError(
                     f"{request.method} {request.url}: timed out"
@@ -463,6 +574,11 @@ class PloneClient:
                 elapsed,
             )
             if response.status_code not in RETRY_STATUSES or attempt + 1 == attempts:
+                self._record({
+                    "method": request.method,
+                    "url": str(request.url),
+                    "status": response.status_code,
+                })
                 return response
             wait = _parse_retry_after(response) or self.backoff * 2**attempt
             logger.warning(
@@ -496,6 +612,7 @@ class PloneClient:
         if content is not None:
             entry["content_length"] = len(content)
         self.dry_run_log.append(entry)
+        self._record({"method": method, "url": url, "status": None, "dry_run": True})
         logger.info("Dry run: %s %s not sent", method, url)
         return httpx.Response(200, json=entry, request=httpx.Request(method, url))
 

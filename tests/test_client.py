@@ -186,6 +186,80 @@ def test_dry_run_records_changes(client_factory, site):
     assert [r.method for r in site.requests] == ["GET"]
 
 
+def test_recording(client_factory, site):
+    client = client_factory(dry_run=True)
+    client.get("/before")
+    with client.recording() as outer:
+        client.get("/news")
+        with client.recording() as inner:
+            client.post("/news", {"title": "Hi"})
+    client.get("/after")
+    assert outer == [
+        {"method": "GET", "url": f"{SITE_URL}/++api++/news", "status": 200},
+        {
+            "method": "POST",
+            "url": f"{SITE_URL}/++api++/news",
+            "status": None,
+            "dry_run": True,
+        },
+    ]
+    assert inner == outer[1:]
+
+
+def test_token_logs_in_once_with_basic_auth(client, site):
+    site.add("POST", "/@login", {"token": "jwt-token"})
+    assert client.token() == "jwt-token"
+    assert client.token() == "jwt-token"
+    assert site.body() == {"login": "admin", "password": "secret"}
+    assert len(site.requests) == 1
+
+
+def test_token_reuses_the_jwt_auth_token(client_factory, site):
+    site.add("POST", "/@login", {"token": "jwt-token"})
+    client = client_factory(auth_method="jwt")
+    client.get("/")
+    assert client.token() == "jwt-token"
+    assert [r.method for r in site.requests] == ["POST", "GET"]
+
+
+@pytest.mark.parametrize(
+    "kwargs,expected",
+    [
+        ({"username": "", "password": "", "token": "given"}, "given"),
+        ({"username": "", "password": ""}, ""),
+    ],
+)
+def test_token_without_login(client_factory, site, kwargs, expected):
+    assert client_factory(**kwargs).token() == expected
+    assert site.requests == []
+
+
+def test_frontend_request(client_factory, site):
+    site.add("POST", "/@login", {"token": "jwt-token"})
+    client = client_factory(frontend_url="http://www.plone.test/", read_only=True)
+    assert client.frontend_url == "http://www.plone.test"
+    client.frontend_request("GET", "http://www.plone.test/news/@blocks-schema")
+    request = site.last
+    assert str(request.url) == "http://www.plone.test/news/@blocks-schema"
+    assert request.headers["Authorization"] == "Bearer jwt-token"
+
+
+def test_frontend_request_defaults_to_the_site_url(client_factory, site):
+    client = client_factory(username="", password="")
+    assert client.frontend_url == SITE_URL
+    site.add("GET", "/Plone/@blocks-schema", status=401)
+    with pytest.raises(PloneAuthenticationError):
+        client.frontend_request("GET", "/@blocks-schema")
+    assert "Authorization" not in site.last.headers
+    response = client.frontend_request("GET", "/@blocks-schema", raise_for_status=False)
+    assert response.status_code == 401
+
+
+def test_frontend_request_refuses_changes(client):
+    with pytest.raises(ValueError, match="not allowed"):
+        client.frontend_request("POST", "/@blocks-schema")
+
+
 def test_retry_idempotent_requests(client_factory, site, monkeypatch):
     sleeps = []
     monkeypatch.setattr(client_module.time, "sleep", sleeps.append)

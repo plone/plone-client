@@ -41,6 +41,9 @@ read_only = true
 secret = "command"
 secret_command = "op read op://Private/example/password"
 verify = "/etc/ssl/certs/example-ca.pem"
+
+[groups]
+customer = ["prod", "local"]
 ```
 
 | Key | Meaning |
@@ -48,6 +51,7 @@ verify = "/etc/ssl/certs/example-ca.pem"
 | `current` | Name of the profile used when no other one is selected. |
 | `defaults` | Connection settings shared by every profile; see below. |
 | `profiles.<name>` | One table per profile; see below. |
+| `groups` | Named lists of profiles; see below. |
 
 The file never holds a secret.
 
@@ -67,7 +71,8 @@ The file never holds a secret.
 | `retries` | integer | `3` | Times a request is repeated after a network error, or after a `429`, `502`, `503`, or `504` answer to a request that is safe to repeat. `0` turns retries off. |
 | `backoff` | number | `0.5` | Base delay in seconds between retries; it doubles after each one. |
 | `api_prefix` | string | `++api++` | Traversal prefix of the REST API. |
-| `description` | string | `""` | Free text, shown by `plone-client profile list`. |
+| `frontend_url` | string | `""` | URL of the Volto frontend, for the services Volto serves itself, such as `@blocks-schema`. Empty means `url`, which is right when `url` is the frontend. |
+| `description` | string | `""` | Free text, shown by `plone-client profile list` and by the MCP server's `list_sites` tool. |
 
 Profile names start with a letter or a digit and contain only letters, digits, `_`, `.`, and `-`.
 
@@ -82,6 +87,20 @@ A profile's own value wins over it.
 | Any other key | No; the file is refused. |
 
 When the configuration file is saved, a profile does not repeat a value equal to the defaults, so it follows later changes to them.
+
+(reference-configuration-groups)=
+
+## Groups
+
+The `groups` table names lists of profiles, which `plone-client mcp --group` serves together; see {ref}`reference-assistant-server-sites`.
+Each key is a group name, and each value is a list of profile names.
+
+- Group names follow the rules of profile names.
+- A group must list at least one profile, and every profile it lists must exist; otherwise the file is refused.
+- A profile listed twice counts once.
+- Removing a profile removes it from its groups, and removes a group left empty.
+
+`plone-client profile groups`, `profile group-set`, and `profile group-remove` change the table.
 
 ## Secrets in the keyring
 
@@ -133,6 +152,7 @@ It then reads the settings from the environment variables below.
 | `PLONE_CLIENT_RETRIES` | Times a request is repeated; `0` turns retries off. |
 | `PLONE_CLIENT_BACKOFF` | Base delay in seconds between retries. |
 | `PLONE_CLIENT_READ_ONLY` | `true` to refuse every change. |
+| `PLONE_CLIENT_FRONTEND_URL` | URL of the Volto frontend, when `PLONE_CLIENT_URL` is the backend. |
 
 These two are read by the command line only.
 
