@@ -1,0 +1,1 @@
+Added a `make release` command that releases the package with zest.releaser and publishes it with uv. @ericof

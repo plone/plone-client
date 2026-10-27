@@ -115,3 +115,16 @@ docs-clean: ## Remove the built documentation
 .PHONY: changelog
 changelog: ## Preview the next change log entry
 	@uvx towncrier build --draft --version=next
+
+############################################
+# Release
+############################################
+.PHONY: release
+release: install ## Release the package to pypi.org
+	@echo -e "$(GREEN)==> Release package$(RESET)"
+	@$(UV) run --group release prerelease
+	@$(UV) run --group release release
+	@rm -Rf dist
+	@$(UV) build
+	@$(UV) publish
+	@$(UV) run --group release postrelease
