@@ -1,1 +1,0 @@
-Rewrote the documentation following the Plone documentation style and the Diátaxis framework, with the Plone Sphinx theme: tutorials, how-to guides with runnable examples, reference including a compatibility grid with Plone and `plone.restapi` versions and a map to the functions of `@plone/client`, and explanation. @ericof

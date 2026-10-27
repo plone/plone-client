@@ -28,7 +28,7 @@ from .exceptions import PloneTimeoutError
 from .managers.files import file_data
 
 
-__version__ = "1.0.0a1.dev0"
+__version__ = "1.0.0a1"
 
 __all__ = [
     "JWTAuth",

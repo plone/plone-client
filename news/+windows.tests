@@ -1,1 +1,0 @@
-Fixed the agent skill tests on Windows, where paths use backslashes and the home directory comes from `USERPROFILE`. @ericof

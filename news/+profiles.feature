@@ -1,1 +1,0 @@
-Added named connection profiles to work with several sites, with passwords kept in the operating system keyring, an environment variable or a command such as a password manager, read-only profiles, a `.plone-client.toml` file that selects the profile of a project, and timeout, retry, and TLS settings per profile or shared by all of them, including a custom CA bundle. @ericof
