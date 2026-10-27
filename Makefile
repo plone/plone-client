@@ -89,17 +89,17 @@ test-integration: install ## Run the integration tests against Plone in Docker (
 .PHONY: docs
 docs: ## Build the documentation (warnings are errors)
 	@echo -e "$(GREEN)==> Build documentation$(RESET)"
-	@$(UV) run --group docs sphinx-build -W --keep-going -b html $(DOCS_DIR) "$(DOCS_BUILDDIR)/html" $(DOCS_SPHINXOPTS)
+	@$(UV) run --all-extras --group docs sphinx-build -W --keep-going -b html $(DOCS_DIR) "$(DOCS_BUILDDIR)/html" $(DOCS_SPHINXOPTS)
 
 .PHONY: docs-livehtml
 docs-livehtml: ## Rebuild the documentation on changes, with live reload in the browser
-	@$(UV) run --group docs sphinx-autobuild --ignore "*.swp" --port 8050 \
+	@$(UV) run --all-extras --group docs sphinx-autobuild --ignore "*.swp" --port 8050 \
 		-b html $(DOCS_DIR) "$(DOCS_BUILDDIR)/html" $(DOCS_SPHINXOPTS)
 
 .PHONY: docs-linkcheck
 docs-linkcheck: ## Check that all links in the documentation resolve
 	@echo -e "$(GREEN)==> Check documentation links$(RESET)"
-	@$(UV) run --group docs sphinx-build -b linkcheck $(DOCS_DIR) "$(DOCS_BUILDDIR)/linkcheck"
+	@$(UV) run --all-extras --group docs sphinx-build -b linkcheck $(DOCS_DIR) "$(DOCS_BUILDDIR)/linkcheck"
 
 .PHONY: docs-vale
 docs-vale: ## Check the documentation with Vale

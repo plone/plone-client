@@ -1,5 +1,6 @@
 from . import SITE_URL
 from mcp.server.mcpserver.exceptions import ToolError
+from pathlib import Path
 from plone_client import mcp_server
 from plone_client import PloneClient
 from plone_client.exceptions import PloneConfigurationError
@@ -24,13 +25,14 @@ WRITE_TOOLS = {
     "copy_content",
     "create_content",
     "create_content_with_files",
-    "create_page",
     "delete_content",
     "move_content",
     "run_transition",
     "update_content",
     "upload_tree",
 }
+if mcp_server.has_html2blocks():
+    WRITE_TOOLS.add("create_page")
 
 
 def tools(server):
@@ -80,6 +82,15 @@ def test_create_page_needs_html2blocks(client, monkeypatch):
     assert "create_page" not in tools(mcp_server.build_server(client))
 
 
+def test_create_page_needs_the_collective_package(client, monkeypatch):
+    def find_spec(name):
+        raise ModuleNotFoundError("No module named 'collective'")
+
+    monkeypatch.setattr(mcp_server, "find_spec", find_spec)
+    assert not mcp_server.has_html2blocks()
+    assert "create_page" not in tools(mcp_server.build_server(client))
+
+
 def test_arguments_have_descriptions(client):
     schema = tools(mcp_server.build_server(client))["get_content"].input_schema
     assert "Site path" in schema["properties"]["path"]["description"]
@@ -108,8 +119,9 @@ def test_value_errors_reach_the_model(client):
         local_path="/nonexistent/folder",
         parent="/",
     )
+    missing = Path("/nonexistent/folder")
     assert error == {
-        "error": {"type": "ValueError", "message": "Not a folder: /nonexistent/folder"}
+        "error": {"type": "ValueError", "message": f"Not a folder: {missing}"}
     }
 
 
@@ -298,7 +310,7 @@ def test_operation_tools(client, site, tmp_path):
 
 
 @pytest.mark.skipif(
-    not mcp_server.find_spec("collective.html2blocks"),
+    not mcp_server.has_html2blocks(),
     reason="collective.html2blocks is not installed",
 )
 def test_create_page_tool(client, site):

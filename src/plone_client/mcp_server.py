@@ -355,6 +355,18 @@ def _per_site(sites: Sites, func: Tool) -> Tool:
     return wrapper
 
 
+def has_html2blocks() -> bool:
+    """Whether ``collective.html2blocks`` is installed.
+
+    :returns: ``True`` if it can be imported.
+    """
+    try:
+        return find_spec("collective.html2blocks") is not None
+    except ModuleNotFoundError:
+        # find_spec imports the parent package, which may be missing too
+        return False
+
+
 def build_server(target: PloneClient | Sites) -> MCPServer:
     """An MCP server whose tools work on one site or several.
 
@@ -694,7 +706,7 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
         )
         return result.to_dict()
 
-    if find_spec("collective.html2blocks") is not None:
+    if has_html2blocks():
 
         @add(CREATE)
         def create_page(

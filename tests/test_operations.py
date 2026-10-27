@@ -1,4 +1,5 @@
 from . import SITE_URL
+from pathlib import PurePath
 from plone_client import operations
 from plone_client.exceptions import PloneConfigurationError
 from plone_client.exceptions import PloneOperationError
@@ -391,7 +392,7 @@ class TestUploadTree:
 
     def test_hidden(self, client, fake_create, tree):
         result = operations.upload_tree(client, tree, "/docs", include_hidden=True)
-        names = [entry["source"].rsplit("/", 1)[-1] for entry in result.created]
+        names = [PurePath(entry["source"]).name for entry in result.created]
         assert ".git" in names
         assert ".DS_Store" in names
 
