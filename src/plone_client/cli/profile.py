@@ -9,6 +9,7 @@ from ..profiles import DEFAULT_KEYS
 from ..profiles import parse_verify
 from ..profiles import Profile
 from ..profiles import SECRET_VALUES
+from . import panels
 from .output import emit
 from .output import PloneGroup
 from .state import get_state
@@ -100,7 +101,7 @@ def check_connection(client: PloneClient, username: str = "") -> dict[str, Any]:
     return result
 
 
-@app.command("list")
+@app.command("list", rich_help_panel=panels.BROWSE)
 def list_profiles(ctx: typer.Context) -> None:
     """List the profiles; the current one is marked."""
     state = get_state(ctx)
@@ -115,7 +116,7 @@ def list_profiles(ctx: typer.Context) -> None:
     )
 
 
-@app.command()
+@app.command(rich_help_panel=panels.BROWSE)
 def show(
     ctx: typer.Context,
     name: Annotated[
@@ -128,7 +129,7 @@ def show(
     emit(ctx, {**profile.summary(), "config_file": str(config.path)})
 
 
-@app.command()
+@app.command(rich_help_panel=panels.WRITE)
 def add(
     ctx: typer.Context,
     name: Annotated[str, typer.Argument(help="Profile name.")],
@@ -205,7 +206,7 @@ def add(
     emit(ctx, {**profile.summary(), "current": config.current == name})
 
 
-@app.command()
+@app.command(rich_help_panel=panels.WRITE)
 def defaults(
     ctx: typer.Context,
     timeout: Annotated[
@@ -249,7 +250,7 @@ def defaults(
     emit(ctx, {"defaults": config.defaults, "config_file": str(config.path)})
 
 
-@app.command("set-secret")
+@app.command("set-secret", rich_help_panel=panels.CONNECTION)
 def set_secret(
     ctx: typer.Context,
     name: Annotated[str, typer.Argument(help="Profile name.")],
@@ -265,7 +266,7 @@ def set_secret(
     emit(ctx, {"name": name, "secret": "stored"})
 
 
-@app.command()
+@app.command(rich_help_panel=panels.WRITE)
 def use(
     ctx: typer.Context,
     name: Annotated[str, typer.Argument(help="Profile name.")],
@@ -278,7 +279,7 @@ def use(
     emit(ctx, {"current": name})
 
 
-@app.command()
+@app.command(rich_help_panel=panels.WRITE)
 def remove(
     ctx: typer.Context,
     name: Annotated[str, typer.Argument(help="Profile name.")],
@@ -294,7 +295,7 @@ def remove(
     emit(ctx, {"removed": name, "secret_removed": removed_secret})
 
 
-@app.command()
+@app.command(rich_help_panel=panels.CONNECTION)
 def test(
     ctx: typer.Context,
     name: Annotated[

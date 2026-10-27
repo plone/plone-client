@@ -1,5 +1,6 @@
 """Site commands: information, types, vocabularies, registry, users and groups."""
 
+from . import panels
 from .output import confirm
 from .output import emit
 from .output import parse_value
@@ -17,12 +18,24 @@ import typer
 
 
 registry_app = typer.Typer(
-    cls=PloneGroup, help="Read and change registry records.", no_args_is_help=True
+    cls=PloneGroup,
+    help="Browse and change the site's registry records.",
+    no_args_is_help=True,
 )
-users_app = typer.Typer(cls=PloneGroup, help="Manage users.", no_args_is_help=True)
-groups_app = typer.Typer(cls=PloneGroup, help="Manage groups.", no_args_is_help=True)
+users_app = typer.Typer(
+    cls=PloneGroup,
+    help="Browse, create, change, and remove users.",
+    no_args_is_help=True,
+)
+groups_app = typer.Typer(
+    cls=PloneGroup,
+    help="Browse, create, and remove groups, and manage their members.",
+    no_args_is_help=True,
+)
 aliases_app = typer.Typer(
-    cls=PloneGroup, help="Manage URL aliases.", no_args_is_help=True
+    cls=PloneGroup,
+    help="Browse, add, and remove URL aliases (redirects) of items.",
+    no_args_is_help=True,
 )
 
 
@@ -30,7 +43,7 @@ commands = typer.Typer()
 """Site commands, merged into the root application."""
 
 
-@commands.command(rich_help_panel="Site")
+@commands.command(rich_help_panel=panels.CONFIGURATION)
 def info(ctx: typer.Context) -> None:
     """Show which site and user the client connects with."""
     state = get_state(ctx)
@@ -40,7 +53,7 @@ def info(ctx: typer.Context) -> None:
     emit(ctx, {"profile": profile.name if profile else None, **result})
 
 
-@commands.command(rich_help_panel="Site")
+@commands.command(rich_help_panel=panels.SITE)
 def types(
     ctx: typer.Context,
     portal_type: Annotated[
@@ -71,7 +84,7 @@ def types(
         )
 
 
-@commands.command(rich_help_panel="Site")
+@commands.command(rich_help_panel=panels.SITE)
 def vocabulary(
     ctx: typer.Context,
     name: Annotated[
@@ -93,7 +106,7 @@ def vocabulary(
     emit(ctx, list(islice(terms, limit)))
 
 
-@commands.command(rich_help_panel="Site")
+@commands.command(rich_help_panel=panels.CONTENT_READ)
 def sharing(
     ctx: typer.Context,
     ref: Annotated[str, typer.Argument(help="Path of the item.")] = "/",
@@ -105,7 +118,7 @@ def sharing(
     emit(ctx, get_state(ctx).client.sharing.get(ref, search=search))
 
 
-@commands.command(rich_help_panel="Escape hatch")
+@commands.command(rich_help_panel=panels.ADVANCED)
 def request(
     ctx: typer.Context,
     method: Annotated[str, typer.Argument(help="GET, POST, PATCH, PUT or DELETE.")],
@@ -154,15 +167,7 @@ def request(
 # ----------------------------------------------------------------------
 
 
-@registry_app.command("get")
-def registry_get(
-    ctx: typer.Context, key: Annotated[str, typer.Argument(help="Record name.")]
-) -> None:
-    """Print the value of a record."""
-    emit(ctx, get_state(ctx).client.registry.get(key))
-
-
-@registry_app.command("list")
+@registry_app.command("list", rich_help_panel=panels.BROWSE)
 def registry_list(
     ctx: typer.Context,
     query: Annotated[
@@ -175,7 +180,15 @@ def registry_list(
     emit(ctx, [{"name": r["name"], "value": r.get("value")} for r in records])
 
 
-@registry_app.command("set")
+@registry_app.command("get", rich_help_panel=panels.BROWSE)
+def registry_get(
+    ctx: typer.Context, key: Annotated[str, typer.Argument(help="Record name.")]
+) -> None:
+    """Print the value of a record."""
+    emit(ctx, get_state(ctx).client.registry.get(key))
+
+
+@registry_app.command("set", rich_help_panel=panels.WRITE)
 def registry_set(
     ctx: typer.Context,
     key: Annotated[str, typer.Argument(help="Record name.")],
@@ -197,7 +210,7 @@ def registry_set(
 # ----------------------------------------------------------------------
 
 
-@users_app.command("list")
+@users_app.command("list", rich_help_panel=panels.BROWSE)
 def users_list(
     ctx: typer.Context,
     search: Annotated[
@@ -214,7 +227,7 @@ def users_list(
     )
 
 
-@users_app.command("get")
+@users_app.command("get", rich_help_panel=panels.BROWSE)
 def users_get(
     ctx: typer.Context, user_id: Annotated[str, typer.Argument(help="User id.")]
 ) -> None:
@@ -222,7 +235,7 @@ def users_get(
     emit(ctx, get_state(ctx).client.users.get(user_id))
 
 
-@users_app.command("create")
+@users_app.command("create", rich_help_panel=panels.WRITE)
 def users_create(
     ctx: typer.Context,
     username: Annotated[str, typer.Argument(help="Login name.")],
@@ -260,7 +273,7 @@ def users_create(
     emit(ctx, get_state(ctx).client.users.create(username, body))
 
 
-@users_app.command("update")
+@users_app.command("update", rich_help_panel=panels.WRITE)
 def users_update(
     ctx: typer.Context,
     user_id: Annotated[str, typer.Argument(help="User id.")],
@@ -281,7 +294,7 @@ def users_update(
     emit(ctx, client.dry_run_log[-1] if client.dry_run else client.users.get(user_id))
 
 
-@users_app.command("delete")
+@users_app.command("delete", rich_help_panel=panels.WRITE)
 def users_delete(
     ctx: typer.Context,
     user_id: Annotated[str, typer.Argument(help="User id.")],
@@ -299,7 +312,7 @@ def users_delete(
 # ----------------------------------------------------------------------
 
 
-@groups_app.command("list")
+@groups_app.command("list", rich_help_panel=panels.BROWSE)
 def groups_list(
     ctx: typer.Context,
     query: Annotated[
@@ -310,7 +323,7 @@ def groups_list(
     emit(ctx, get_state(ctx).client.groups.list(query=query))
 
 
-@groups_app.command("get")
+@groups_app.command("get", rich_help_panel=panels.BROWSE)
 def groups_get(
     ctx: typer.Context, group_id: Annotated[str, typer.Argument(help="Group id.")]
 ) -> None:
@@ -318,7 +331,7 @@ def groups_get(
     emit(ctx, get_state(ctx).client.groups.get(group_id))
 
 
-@groups_app.command("create")
+@groups_app.command("create", rich_help_panel=panels.WRITE)
 def groups_create(
     ctx: typer.Context,
     group_id: Annotated[str, typer.Argument(help="Group id.")],
@@ -335,7 +348,7 @@ def groups_create(
     emit(ctx, get_state(ctx).client.groups.create(group_id, body))
 
 
-@groups_app.command("add-member")
+@groups_app.command("add-member", rich_help_panel=panels.MEMBERSHIP)
 def groups_add_member(
     ctx: typer.Context,
     group_id: Annotated[str, typer.Argument(help="Group id.")],
@@ -352,7 +365,7 @@ def groups_add_member(
     )
 
 
-@groups_app.command("remove-member")
+@groups_app.command("remove-member", rich_help_panel=panels.MEMBERSHIP)
 def groups_remove_member(
     ctx: typer.Context,
     group_id: Annotated[str, typer.Argument(help="Group id.")],
@@ -369,7 +382,7 @@ def groups_remove_member(
     )
 
 
-@groups_app.command("delete")
+@groups_app.command("delete", rich_help_panel=panels.WRITE)
 def groups_delete(
     ctx: typer.Context,
     group_id: Annotated[str, typer.Argument(help="Group id.")],
@@ -387,7 +400,7 @@ def groups_delete(
 # ----------------------------------------------------------------------
 
 
-@aliases_app.command("list")
+@aliases_app.command("list", rich_help_panel=panels.BROWSE)
 def aliases_list(
     ctx: typer.Context,
     ref: Annotated[
@@ -400,7 +413,7 @@ def aliases_list(
     emit(ctx, get_state(ctx).client.aliases.list(ref, **params))
 
 
-@aliases_app.command("add")
+@aliases_app.command("add", rich_help_panel=panels.WRITE)
 def aliases_add(
     ctx: typer.Context,
     ref: Annotated[str, typer.Argument(help="Item the aliases point to.")],
@@ -412,7 +425,7 @@ def aliases_add(
     emit(ctx, client.dry_run_log[-1] if client.dry_run else client.aliases.list(ref))
 
 
-@aliases_app.command("remove")
+@aliases_app.command("remove", rich_help_panel=panels.WRITE)
 def aliases_remove(
     ctx: typer.Context,
     ref: Annotated[str, typer.Argument(help="Item the aliases point to.")],

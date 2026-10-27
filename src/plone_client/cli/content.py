@@ -2,6 +2,7 @@
 
 from .. import blocks as blocks_helpers
 from ..utils import uid_from_ref
+from . import panels
 from .output import confirm
 from .output import emit
 from .output import parse_assignments
@@ -48,7 +49,7 @@ commands = typer.Typer()
 """Content commands, merged into the root application."""
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_READ)
 def get(
     ctx: typer.Context,
     ref: Ref = "/",
@@ -78,7 +79,7 @@ def get(
     )
 
 
-@commands.command("ls", rich_help_panel="Content")
+@commands.command("ls", rich_help_panel=panels.CONTENT_READ)
 def list_children(
     ctx: typer.Context,
     ref: Ref = "/",
@@ -103,7 +104,7 @@ def list_children(
     )
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_READ)
 def search(
     ctx: typer.Context,
     ref: Ref = "/",
@@ -174,7 +175,7 @@ def search(
     emit(ctx, list(results))
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_CHANGE)
 def create(
     ctx: typer.Context,
     parent: Annotated[str, typer.Argument(help="Path of the folder.")],
@@ -218,7 +219,7 @@ def create(
     emit(ctx, item if full or client.dry_run else summary(item))
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_CHANGE)
 def update(
     ctx: typer.Context,
     ref: Ref,
@@ -240,7 +241,7 @@ def update(
     emit(ctx, item if full or client.dry_run or item is None else summary(item))
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_CHANGE)
 def delete(
     ctx: typer.Context,
     refs: Annotated[list[str], typer.Argument(help="Items to delete.")],
@@ -257,7 +258,7 @@ def delete(
     emit(ctx, {"deleted": deleted, "dry_run": client.dry_run})
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_CHANGE)
 def copy(
     ctx: typer.Context,
     sources: Annotated[list[str], typer.Argument(help="Items to copy.")],
@@ -271,7 +272,7 @@ def copy(
     )
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_CHANGE)
 def move(
     ctx: typer.Context,
     sources: Annotated[list[str], typer.Argument(help="Items to move.")],
@@ -286,7 +287,7 @@ def move(
 
 
 @commands.command(
-    rich_help_panel="Content",
+    rich_help_panel=panels.CONTENT_CHANGE,
     # so that a negative delta (-1) is read as an argument, not an option
     context_settings={"ignore_unknown_options": True},
 )
@@ -317,7 +318,7 @@ def order(
     emit(ctx, [entry["@id"] for entry in client.content.children(folder)])
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_CHANGE)
 def workflow(
     ctx: typer.Context,
     ref: Ref,
@@ -367,13 +368,13 @@ def workflow(
     )
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_READ)
 def history(ctx: typer.Context, ref: Ref) -> None:
     """List the versions and workflow history of an item."""
     emit(ctx, get_state(ctx).client.history.list(ref))
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_READ)
 def blocks(
     ctx: typer.Context,
     ref: Ref,
@@ -400,7 +401,7 @@ def blocks(
     emit(ctx, rows)
 
 
-@commands.command(rich_help_panel="Content")
+@commands.command(rich_help_panel=panels.CONTENT_READ)
 def resolve(ctx: typer.Context, ref: Ref) -> None:
     """Print the path, URL and UID of an item."""
     client = get_state(ctx).client
@@ -421,7 +422,7 @@ def resolve(ctx: typer.Context, ref: Ref) -> None:
     )
 
 
-@commands.command(rich_help_panel="Files")
+@commands.command(rich_help_panel=panels.CONTENT_FILES)
 def upload(
     ctx: typer.Context,
     parent: Annotated[str, typer.Argument(help="Path of the folder.")],
@@ -457,7 +458,7 @@ def upload(
     emit(ctx, results)
 
 
-@commands.command(rich_help_panel="Files")
+@commands.command(rich_help_panel=panels.CONTENT_FILES)
 def download(
     ctx: typer.Context,
     ref: Ref,

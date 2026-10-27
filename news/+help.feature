@@ -1,0 +1,1 @@
+Grouped the command line help into panels: commands that read, change, or upload content, site administration, advanced requests, and configuration; each command group splits its subcommands into Browse and Write panels. @ericof

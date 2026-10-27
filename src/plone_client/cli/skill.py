@@ -1,5 +1,6 @@
 """``plone-client skill``: the agent skill shipped with plone-client."""
 
+from . import panels
 from .output import emit
 from .output import PloneGroup
 from importlib.resources import files
@@ -28,13 +29,13 @@ def skill_text() -> str:
     return files("plone_client").joinpath("skill", "SKILL.md").read_text()
 
 
-@app.command()
+@app.command(rich_help_panel=panels.BROWSE)
 def show() -> None:
     """Print the skill's SKILL.md."""
     typer.echo(skill_text(), nl=False)
 
 
-@app.command()
+@app.command(rich_help_panel=panels.WRITE)
 def install(
     ctx: typer.Context,
     user: Annotated[

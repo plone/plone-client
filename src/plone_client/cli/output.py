@@ -16,6 +16,7 @@ from ..exceptions import PloneForbiddenError
 from ..exceptions import PloneNotFoundError
 from ..exceptions import PloneReadOnlyError
 from ..exceptions import PloneServerError
+from .panels import ROOT_ORDER
 from .state import get_state
 from collections.abc import Iterable
 from collections.abc import Mapping
@@ -128,6 +129,21 @@ class PloneGroup(typer.core.TyperGroup):
             payload = {"error": {"type": "ValueError", "message": str(error)}}
             typer.echo(json.dumps(payload, indent=2), err=True)
             ctx.exit(2)
+
+
+class RootGroup(PloneGroup):
+    """The root command group, listing commands in a curated order.
+
+    Typer lists single commands before command groups, which would split
+    the site commands (``info``, ``types``) from the site groups (``users``,
+    ``registry``). :data:`~plone_client.cli.panels.ROOT_ORDER` keeps each
+    help panel together and in a stable order.
+    """
+
+    def list_commands(self, ctx: Any) -> list[str]:
+        rank = {name: index for index, name in enumerate(ROOT_ORDER)}
+        names = super().list_commands(ctx)
+        return sorted(names, key=lambda name: rank.get(name, len(rank)))
 
 
 def project(data: Any, fields: Iterable[str]) -> Any:
