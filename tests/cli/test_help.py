@@ -4,6 +4,7 @@ from plone_client.cli import panels
 
 import io
 import pytest
+import re
 import typer.main
 
 
@@ -32,6 +33,18 @@ def mode(request, monkeypatch):
     return request.param
 
 
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def text(run) -> str:
+    """Help output without colours.
+
+    Typer forces colours when ``GITHUB_ACTIONS``, ``FORCE_COLOR`` or
+    ``PY_COLORS`` is set, which splits the panel titles with ANSI codes.
+    """
+    return ANSI.sub("", run.stdout)
+
+
 def heading(panel: str, mode: str | None) -> str:
     """How a panel title appears in the help."""
     return f"─ {panel} ─" if mode else f"\n{panel}:\n"
@@ -45,12 +58,12 @@ def row(name: str, mode: str | None) -> str:
 def test_root_help_lists_panels_in_order(invoke, mode):
     run = invoke("--help")
     assert run.exit_code == 0, run.stderr
-    positions = [run.stdout.index(heading(panel, mode)) for panel in ROOT_PANELS]
+    positions = [text(run).index(heading(panel, mode)) for panel in ROOT_PANELS]
     assert positions == sorted(positions)
 
 
 def test_root_help_lists_commands_in_order(invoke, mode):
-    stdout = invoke("--help").stdout
+    stdout = text(invoke("--help"))
     positions = [stdout.index(row(name, mode)) for name in panels.ROOT_ORDER]
     assert positions == sorted(positions)
 
@@ -64,19 +77,20 @@ def test_root_order_covers_every_command():
 def test_every_command_has_a_panel(invoke, mode, name):
     run = invoke(*([name] if name else []), "--help")
     assert run.exit_code == 0, run.stderr
-    assert heading("Commands", mode) not in run.stdout
+    assert heading("Commands", mode) not in text(run)
 
 
 @pytest.mark.parametrize("name,expected", GROUP_PANELS.items())
 def test_group_panels(invoke, mode, name, expected):
     run = invoke(name, "--help")
-    positions = [run.stdout.index(heading(panel, mode)) for panel in expected]
+    positions = [text(run).index(heading(panel, mode)) for panel in expected]
     assert positions == sorted(positions)
 
 
 def test_plain_help_draws_no_boxes(invoke, monkeypatch):
     monkeypatch.setattr(app, "rich_markup_mode", None)
-    assert not {"╭", "│", "─ "} & set(invoke("--help").stdout)
+    output = text(invoke("--help"))
+    assert [mark for mark in ("╭", "│", "─ ") if mark in output] == []
 
 
 class Terminal(io.StringIO):
