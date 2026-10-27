@@ -84,6 +84,38 @@ def types(
         )
 
 
+@commands.command("block-types", rich_help_panel=panels.SITE)
+def block_types(
+    ctx: typer.Context,
+    block_id: Annotated[
+        str | None,
+        typer.Argument(help="Block whose docs, schema and variations to show."),
+    ] = None,
+    for_item: Annotated[
+        str | None,
+        typer.Option(
+            "--for", help="Only the blocks that editors can add to this item."
+        ),
+    ] = None,
+    markdown: Annotated[
+        bool, typer.Option("--markdown", help="Print Markdown instead of JSON.")
+    ] = False,
+) -> None:
+    """List the blocks of the site, or show one (Volto's @blocks-schema).
+
+    Without that service (older Volto, or a backend URL without
+    frontend_url), Volto's core blocks are described instead, with
+    "source": "builtin".
+    """
+    manager = get_state(ctx).client.block_types
+    if markdown:
+        typer.echo(manager.markdown(block_id, for_item))
+    elif block_id:
+        emit(ctx, manager.get(block_id, for_item))
+    else:
+        emit(ctx, manager.list(for_item))
+
+
 @commands.command(rich_help_panel=panels.SITE)
 def vocabulary(
     ctx: typer.Context,

@@ -23,6 +23,7 @@ Every exception derives from {class}`~plone_client.exceptions.PloneClientError`,
 | {class}`~plone_client.exceptions.PloneReadOnlyError` | `PloneClientError` | A read-only client is asked to change the site. | 7 |
 | {class}`~plone_client.exceptions.PloneConnectionError` | `PloneClientError` | The site cannot be reached. | 8 |
 | {class}`~plone_client.exceptions.PloneTimeoutError` | `PloneConnectionError` | The site does not answer in time. | 8 |
+| {class}`~plone_client.exceptions.PloneOperationError` | `PloneClientError` | An operation of {mod}`plone_client.operations` stops part way; its `result` lists what was done, and `__cause__` is the error that stopped it. | That of `__cause__` |
 | {class}`~plone_client.exceptions.PloneAPIError` | `PloneClientError` | The site answers with an error not listed below. | 1 |
 | {class}`~plone_client.exceptions.PloneBadRequestError` | `PloneAPIError` | `400` | 6 |
 | {class}`~plone_client.exceptions.PloneAuthenticationError` | `PloneAPIError` | `401` | 4 |

@@ -1,6 +1,7 @@
 """Managers: the areas of ``plone.restapi``, as attributes of the client."""
 
 from .base import BaseManager
+from .block_types import BlockTypesManager
 from .content import ContentManager
 from .discussion import AliasesManager
 from .discussion import CommentsManager
@@ -29,6 +30,7 @@ __all__ = [
     "AddonsManager",
     "AliasesManager",
     "BaseManager",
+    "BlockTypesManager",
     "CommentsManager",
     "ContentManager",
     "ContentRulesManager",

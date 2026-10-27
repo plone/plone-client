@@ -27,8 +27,13 @@ profiles live in a TOML file, by default ``~/.config/plone-client/config.toml``
     secret_command = "op read op://Private/example/password"
     verify = "/etc/ssl/certs/example-ca.pem"
 
+    [groups]
+    sites = ["blog", "production"]
+
 The ``defaults`` table holds the connection settings shared by every
-profile (see :data:`DEFAULT_KEYS`); a profile's own value wins.
+profile (see :data:`DEFAULT_KEYS`); a profile's own value wins. The
+``groups`` table names lists of profiles, which the MCP server can serve
+together (``plone-client mcp --group sites``).
 
 Secrets never go in the file. By default they are kept in the operating
 system's keyring (macOS Keychain, Windows Credential Locker, Secret Service
@@ -41,6 +46,7 @@ the ``current`` profile of the configuration file.
 """
 
 from .exceptions import PloneConfigurationError
+from collections.abc import Iterable
 from collections.abc import Mapping
 from dataclasses import asdict
 from dataclasses import dataclass
@@ -149,6 +155,8 @@ class Profile:
         overloaded site; see :class:`~plone_client.PloneClient`.
     :param backoff: Base delay in seconds between retries.
     :param api_prefix: Traversal prefix of the REST API.
+    :param frontend_url: URL of the Volto frontend, when ``url`` is the
+        backend; used for services that Volto serves (``@blocks-schema``).
     :param description: Free text, shown by ``plone-client profile list``.
     """
 
@@ -165,6 +173,7 @@ class Profile:
     retries: int = 3
     backoff: float = 0.5
     api_prefix: str = "++api++"
+    frontend_url: str = ""
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -187,6 +196,7 @@ class Profile:
             )
         self._check_connection()
         self.url = self.url.rstrip("/")
+        self.frontend_url = self.frontend_url.rstrip("/")
 
     def _check_connection(self) -> None:
         """Check ``verify``, ``timeout``, ``retries`` and ``backoff``.
@@ -272,6 +282,8 @@ class Profile:
             "backoff": self.backoff,
             "read_only": self.read_only,
         }
+        if self.frontend_url:
+            settings["frontend_url"] = self.frontend_url
         secret = self.get_secret()
         if self.auth == "token":
             settings["token"] = secret
@@ -302,11 +314,70 @@ class Config:
         self.current: str = str(data.get("current", ""))
         self.defaults: dict[str, Any] = {}
         self.profiles: dict[str, Profile] = {}
+        #: Named lists of profiles, such as the sites of one customer.
+        self.groups: dict[str, list[str]] = {}
         self.set_defaults(data.get("defaults") or {})
         self.profiles = {
             name: Profile.from_mapping(name, {**self.defaults, **table})
             for name, table in (data.get("profiles") or {}).items()
         }
+        groups = data.get("groups") or {}
+        if not isinstance(groups, Mapping):
+            raise PloneConfigurationError("groups must be a table")
+        for name, members in groups.items():
+            self.set_group(name, members)
+
+    def set_group(self, name: str, members: Iterable[str]) -> list[str]:
+        """Create or replace a group of profiles.
+
+        :param name: Group name.
+        :param members: Names of the profiles in the group; duplicates are
+            dropped and the order kept.
+        :returns: The members.
+        :raises PloneConfigurationError: If the name is invalid, the group
+            is empty, or a profile does not exist.
+        """
+        if not NAME_RE.match(name):
+            raise PloneConfigurationError(f"Invalid group name: {name!r}")
+        if isinstance(members, str | Mapping) or not isinstance(members, Iterable):
+            raise PloneConfigurationError(f"Group {name!r} must be a list of profiles")
+        unique = list(dict.fromkeys(str(member) for member in members))
+        if not unique:
+            raise PloneConfigurationError(f"Group {name!r} has no profiles")
+        unknown = [member for member in unique if member not in self.profiles]
+        if unknown:
+            raise PloneConfigurationError(
+                f"Group {name!r}: unknown profiles {', '.join(unknown)}"
+            )
+        self.groups[name] = unique
+        return unique
+
+    def group(self, name: str) -> list[Profile]:
+        """The profiles of a group.
+
+        :param name: Group name.
+        :returns: The profiles, in the group's order.
+        :raises PloneConfigurationError: If there is no such group.
+        """
+        try:
+            members = self.groups[name]
+        except KeyError:
+            known = ", ".join(sorted(self.groups)) or "none"
+            raise PloneConfigurationError(
+                f"Unknown group {name!r} in {self.path} (known: {known})"
+            ) from None
+        return [self.profiles[member] for member in members]
+
+    def remove_group(self, name: str) -> list[str]:
+        """Remove a group; its profiles are kept.
+
+        :param name: Group name.
+        :returns: The members it had.
+        :raises PloneConfigurationError: If there is no such group.
+        """
+        members = [profile.name for profile in self.group(name)]
+        del self.groups[name]
+        return members
 
     def set_defaults(self, values: Mapping[str, Any]) -> None:
         """Change the settings shared by every profile.
@@ -390,7 +461,7 @@ class Config:
             self.current = profile.name
 
     def remove(self, name: str) -> Profile:
-        """Remove a profile.
+        """Remove a profile, also from the groups; a group left empty goes too.
 
         :param name: Profile name.
         :returns: The removed profile.
@@ -399,12 +470,19 @@ class Config:
         del self.profiles[name]
         if self.current == name:
             self.current = ""
+        for group, members in list(self.groups.items()):
+            remaining = [member for member in members if member != name]
+            if remaining:
+                self.groups[group] = remaining
+            else:
+                del self.groups[group]
         return profile
 
     def to_mapping(self) -> dict[str, Any]:
         """Contents of the configuration file.
 
-        :returns: ``current`` and the ``defaults`` and ``profiles`` tables.
+        :returns: ``current`` and the ``defaults``, ``profiles`` and
+            ``groups`` tables.
         """
         data: dict[str, Any] = {}
         if self.current:
@@ -415,6 +493,10 @@ class Config:
             name: profile.to_mapping(self.defaults)
             for name, profile in sorted(self.profiles.items())
         }
+        if self.groups:
+            data["groups"] = {
+                name: list(members) for name, members in sorted(self.groups.items())
+            }
         return data
 
     def save(self) -> None:
@@ -468,8 +550,8 @@ def settings_from_env(
 
     Reads ``URL``, ``USERNAME`` (or ``USER``), ``PASSWORD``, ``TOKEN``,
     ``AUTH_METHOD``, ``API_PREFIX``, ``TIMEOUT``, ``VERIFY`` (``true``,
-    ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF`` and
-    ``READ_ONLY``, each after the prefix. With ``prefix="REMOTE_"``, this
+    ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF``, ``READ_ONLY``
+    and ``FRONTEND_URL``, each after the prefix. With ``prefix="REMOTE_"``, this
     reads the ``REMOTE_URL``, ``REMOTE_USER`` and ``REMOTE_PASSWORD``
     variables used by older scripts.
 
@@ -490,6 +572,7 @@ def settings_from_env(
         "username": value("USERNAME") or value("USER"),
         "password": environ.get(f"{prefix}PASSWORD", ""),
         "token": value("TOKEN"),
+        "frontend_url": value("FRONTEND_URL"),
     }
     if value("AUTH_METHOD"):
         settings["auth_method"] = value("AUTH_METHOD")

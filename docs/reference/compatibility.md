@@ -57,10 +57,19 @@ On an older site, the methods below raise {class}`~plone_client.exceptions.Plone
 
 Logging in with `POST @login` works on every supported version.
 
+## Volto
+
+`client.block_types`, the `block-types` command, and the `block_types` tool of the MCP server ask the `@blocks-schema` service of the Volto server.
+That service comes with [Volto pull request 8023](https://github.com/plone/volto/pull/8023), which is not part of a Volto release yet.
+Until a site runs a Volto that has it, they describe Volto's core blocks instead, as {ref}`reference-managers-block-types` explains.
+
 ## Python
 
 plone-client needs Python 3.11 or later.
 The site's own Python version does not matter.
+
+Converting Markdown and HTML to blocks, with the `markdown` extra, needs Python 3.12 or later, because `collective.html2blocks` does.
+On Python 3.11, the extra installs nothing, and the conversion raises {class}`~plone_client.exceptions.PloneConfigurationError`.
 
 ## Related
 

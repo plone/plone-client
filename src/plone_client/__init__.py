@@ -21,6 +21,7 @@ from .exceptions import PloneConflictError
 from .exceptions import PloneConnectionError
 from .exceptions import PloneForbiddenError
 from .exceptions import PloneNotFoundError
+from .exceptions import PloneOperationError
 from .exceptions import PloneReadOnlyError
 from .exceptions import PloneServerError
 from .exceptions import PloneTimeoutError
@@ -41,6 +42,7 @@ __all__ = [
     "PloneConnectionError",
     "PloneForbiddenError",
     "PloneNotFoundError",
+    "PloneOperationError",
     "PloneReadOnlyError",
     "PloneServerError",
     "PloneTimeoutError",

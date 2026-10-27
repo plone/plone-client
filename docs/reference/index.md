@@ -1,8 +1,8 @@
 ---
 myst:
   html_meta:
-    "description": "Reference documentation of plone-client: compatibility, the client, managers, command line, configuration, and exceptions."
-    "property=og:description": "Reference documentation of plone-client: compatibility, the client, managers, command line, configuration, and exceptions."
+    "description": "Reference documentation of plone-client: compatibility, the client, managers, operations, command line, MCP server, configuration, and exceptions."
+    "property=og:description": "Reference documentation of plone-client: compatibility, the client, managers, operations, command line, MCP server, configuration, and exceptions."
     "property=og:title": "Reference"
 ---
 
@@ -19,6 +19,7 @@ compatibility
 client
 managers
 cli
+mcp-server
 configuration
 exceptions
 python-api

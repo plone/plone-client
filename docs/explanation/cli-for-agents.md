@@ -1,8 +1,8 @@
 ---
 myst:
   html_meta:
-    "description": "Why plone-client offers coding agents a command line rather than an MCP server, and what makes it safe for them."
-    "property=og:description": "Why plone-client offers coding agents a command line rather than an MCP server, and what makes it safe for them."
+    "description": "Why plone-client offers coding agents a command line, and what makes it safe for them."
+    "property=og:description": "Why plone-client offers coding agents a command line, and what makes it safe for them."
     "property=og:title": "About the command line for coding agents"
 ---
 
@@ -25,7 +25,7 @@ When an agent does something unexpected, you can read the exact command in its t
 The same commands also serve shell scripts and CI jobs, so one tool covers all three.
 
 An MCP server still has its place.
-Chat assistants without a terminal can only reach a site through one, and a server can offer operations that group several requests, such as creating an item with its images and setting its lead image in one call.
+Chat assistants without a terminal can only reach a site through one, so plone-client ships one too, built on the same library and profiles; {ref}`explanation-interfaces` compares the two.
 
 ## Why a skill
 

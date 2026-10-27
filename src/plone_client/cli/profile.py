@@ -164,6 +164,13 @@ def add(
     backoff: Annotated[
         float | None, typer.Option(help=BACKOFF_HELP, show_default=False)
     ] = None,
+    frontend_url: Annotated[
+        str,
+        typer.Option(
+            help="URL of the Volto frontend, when --url is the backend; "
+            "used to list the site's blocks."
+        ),
+    ] = "",
     description: Annotated[str, typer.Option(help="Free text.")] = "",
     password_stdin: Annotated[
         bool,
@@ -193,6 +200,7 @@ def add(
         secret=secret,  # type: ignore[arg-type]
         secret_env=secret_env,
         secret_command=secret_command,
+        frontend_url=frontend_url,
         description=description,
         **{**config.defaults, **settings},
     )
@@ -277,6 +285,47 @@ def use(
     config.current = name
     config.save()
     emit(ctx, {"current": name})
+
+
+@app.command(rich_help_panel=panels.BROWSE)
+def groups(ctx: typer.Context) -> None:
+    """List the groups of profiles."""
+    config = get_state(ctx).config
+    emit(
+        ctx,
+        [
+            {"name": name, "profiles": members}
+            for name, members in sorted(config.groups.items())
+        ],
+    )
+
+
+@app.command("group-set", rich_help_panel=panels.WRITE)
+def group_set(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Group name.")],
+    profiles: Annotated[list[str], typer.Argument(help="Profiles in the group.")],
+) -> None:
+    """Create a group of profiles, or replace its profiles.
+
+    The MCP server serves a group with 'plone-client mcp --group NAME'.
+    """
+    config = get_state(ctx).config
+    members = config.set_group(name, profiles)
+    config.save()
+    emit(ctx, {"name": name, "profiles": members})
+
+
+@app.command("group-remove", rich_help_panel=panels.WRITE)
+def group_remove(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Group name.")],
+) -> None:
+    """Remove a group; its profiles are kept."""
+    config = get_state(ctx).config
+    members = config.remove_group(name)
+    config.save()
+    emit(ctx, {"removed": name, "profiles": members})
 
 
 @app.command(rich_help_panel=panels.WRITE)

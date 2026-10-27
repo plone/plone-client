@@ -34,7 +34,7 @@ Options marked "No" must come before the command, because `profile add` has opti
 
 ## Commands
 
-<!-- source: src/plone_client/cli/content.py, src/plone_client/cli/site.py, src/plone_client/cli/profile.py -->
+<!-- source: src/plone_client/cli/content.py, src/plone_client/cli/operations.py, src/plone_client/cli/site.py, src/plone_client/cli/mcp.py, src/plone_client/cli/profile.py -->
 
 `plone-client --help` lists the commands in the groups below, and each command group splits its subcommands into **Browse** (read only) and **Write** panels.
 In a terminal, the help draws each group as a box.
@@ -60,6 +60,8 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 | Command | Does |
 |---|---|
 | `create <parent> <type>` | Create an item inside a folder. |
+| `create-page <parent> <file>` | Create a page from Markdown, or HTML with `--html` or an `.html` file, converted to blocks; `-` reads standard input. Needs the `markdown` extra. |
+| `create-with-files <parent> <type> <file>…` | Create an item, upload files and images inside it, and set its lead image; `--lead N` picks the Nth file, `--no-lead` sets none. |
 | `update <ref>` | Change fields of an item. |
 | `workflow <ref> [transition]` | Show the workflow state and transitions of an item, or run a transition. |
 | `copy <ref>… --to <folder>` | Copy items into a folder. |
@@ -72,6 +74,7 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 | Command | Does |
 |---|---|
 | `upload <parent> <file>…` | Upload files as `File` or `Image` items; `--tus` uploads in chunks. |
+| `upload-tree <folder> <parent>` | Upload the contents of a local folder as pages, files, and images, keeping its structure; `--pages` turns Markdown and HTML files into pages. |
 | `download <ref>` | Download the file or image of an item. |
 
 ### Site users, settings, and types
@@ -79,6 +82,7 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 | Command | Does |
 |---|---|
 | `types [type]` | List content types, or show the JSON schema of one. |
+| `block-types [block]` | List the blocks of the site, or show the docs, schema, and variations of one; `--for <ref>` lists only the blocks that editors can add to an item, and `--markdown` prints Markdown. |
 | `vocabulary [name]` | List vocabularies, or the terms of one. |
 | `users list`, `get` / `create`, `update`, `delete` | Browse and manage users. |
 | `groups list`, `get` / `create`, `delete` / `add-member`, `remove-member` | Browse and manage groups and their members. |
@@ -90,6 +94,10 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 | Command | Does |
 |---|---|
 | `request <method> <ref>` | Send any request, for services without a command. |
+| `mcp` | Serve sites as an MCP server over standard input and output: the selected profile, or several with `--site`, `--group`, and `--all`; see {ref}`reference-assistant-server`. Needs the `mcp` extra. |
+
+`create-page`, `create-with-files`, and `upload-tree` run the operations of {mod}`plone_client.operations` and print their result: `created`, `changed`, and every request in `requests`.
+When one of them stops part way, the error on standard error also has a `result` with what was already done, and the exit code is that of the request that failed.
 
 ### Connection, profiles, and agents
 
@@ -97,6 +105,7 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 |---|---|
 | `info` | Show the profile, site, and user the command line connects with, and the Plone version. |
 | `profile list`, `show` / `add`, `use`, `defaults`, `remove` / `set-secret`, `test` | Manage connection profiles; `add` and `defaults` take `--timeout`, `--verify` (`true`, `false`, or a CA bundle path), `--retries`, and `--backoff`. |
+| `profile groups` / `group-set NAME PROFILE...`, `group-remove NAME` | List, create or replace, and remove groups of profiles; see {ref}`reference-configuration-groups`. |
 | `skill show` / `install` | Print the agent skill, or install it in `.claude/skills`; `--user` installs it in `~/.claude/skills`, `--dir` in another skills directory. |
 
 In the group rows, `/` separates the panels of the group's help: Browse, then Write, then Membership or Connection.

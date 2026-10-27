@@ -64,19 +64,29 @@ plone-client download /news/item/photo.jpg
 
 Commands that change an item print `@id`, `@type`, `UID`, `id`, `title`, and `review_state`; add `--full` for the whole item.
 
+## Tasks of several steps
+
+These commands send several requests in the right order and print every one of them, with what they created.
+If one stops part way, its error has a `result` with what was already created; report it to the user.
+
+```shell
+plone-client create-page /docs page.md --publish publish        # Markdown (or --html) to blocks; # heading = title
+plone-client create-page /docs - --title "Notes" < notes.md
+plone-client create-with-files /news "News Item" lead.jpg more.jpg --title "Title" --publish publish
+plone-client upload-tree ./handbook /docs --pages               # folders as pages, .md files as pages
+```
+
+`create-page` and `upload-tree --pages` need the `markdown` extra; exit code 3 means it is missing.
+
 ## Content model
 
 - Run `plone-client types <type>` before setting fields: the site silently ignores fields a type does not have.
 - On Volto sites there is usually no `Folder` type; `Document` items are folderish.
-- A News Item's lead image on a Volto site is `preview_image_link`: upload the image inside the item, then set the field to the image's UID.
-
-  ```shell
-  plone-client upload /news/item lead.jpg -f UID
-  plone-client update /news/item -s preview_image_link=<UID>
-  ```
-
-  Other sites have an `image` field instead; the type's schema says which.
+- A News Item's lead image on a Volto site is `preview_image_link`, a relation to an Image inside the item; other sites have an `image` field.
+  `create-with-files` picks the right one from the type's schema.
 - `create` adds a title block and a description block unless given `--no-blocks` or `blocks` in the data.
+- Before writing blocks by hand, run `plone-client block-types --markdown` for the blocks the site offers, and `plone-client block-types <block> --markdown` for the data one takes.
+  A `"source": "builtin"` answer describes only Volto's core blocks: the site did not say which blocks it has.
 
 ## Site administration
 
