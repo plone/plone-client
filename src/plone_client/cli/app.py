@@ -1,6 +1,6 @@
 """The ``plone-client`` Typer application and its global options."""
 
-from .output import PloneGroup
+from .output import RootGroup
 from .state import State
 from pathlib import Path
 from typing import Annotated
@@ -10,18 +10,22 @@ import typer
 
 
 app = typer.Typer(
-    cls=PloneGroup,
+    cls=RootGroup,
     name="plone-client",
     help=(
-        "Manage content and settings of Plone sites through plone.restapi.\n\n"
+        "plone-client — manage the content and settings of Plone sites "
+        "through plone.restapi.\n\n"
+        "Pick a site with a profile (plone-client profile add), then read and "
+        "change its content with the commands below.\n\n"
         "Results are printed as JSON on standard output; errors as JSON on "
         "standard error, with exit codes 3 (configuration), 4 (not allowed), "
         "5 (not found), 6 (invalid request), 7 (read-only), 8 (connection) "
-        "and 9 (server error)."
+        "and 9 (server error). Run plone-client COMMAND --help for the "
+        "options of each command."
     ),
     no_args_is_help=True,
     pretty_exceptions_enable=False,
-    rich_markup_mode=None,
+    rich_markup_mode="rich",
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 

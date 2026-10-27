@@ -36,36 +36,70 @@ Options marked "No" must come before the command, because `profile add` has opti
 
 <!-- source: src/plone_client/cli/content.py, src/plone_client/cli/site.py, src/plone_client/cli/profile.py -->
 
+`plone-client --help` lists the commands in the groups below, and each command group splits its subcommands into **Browse** (read only) and **Write** panels.
+In a terminal, the help draws each group as a box.
+When the output goes to a pipe or a file, as it does for scripts and coding agents, the help is plain text with the same groups as titled sections.
+To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
+
+`<ref>` accepts a path, a URL inside the site, `uid:<UID>`, or a `resolveuid` link.
+
+### Read content
+
 | Command | Does |
 |---|---|
 | `get <ref>` | Print an item. |
 | `ls [ref]` | List the items inside a folder, in order. |
 | `search [ref]` | Search the catalog, inside a folder or the whole site. |
+| `resolve <ref>` | Print the path, URL, and UID of an item. |
+| `blocks <ref>` | Summarize the blocks of an item, nested ones included. |
+| `history <ref>` | List the versions and workflow history of an item. |
+| `sharing <ref>` | Show the local roles of an item. |
+
+### Change content
+
+| Command | Does |
+|---|---|
 | `create <parent> <type>` | Create an item inside a folder. |
 | `update <ref>` | Change fields of an item. |
-| `delete <ref>…` | Delete items. |
+| `workflow <ref> [transition]` | Show the workflow state and transitions of an item, or run a transition. |
 | `copy <ref>… --to <folder>` | Copy items into a folder. |
 | `move <ref>… --to <folder>` | Move items into a folder. |
 | `order <folder> <id> <delta>` | Move an item within its folder: `top`, `bottom`, `up`, `down`, or a signed number. |
-| `workflow <ref> [transition]` | Show the workflow state and transitions of an item, or run a transition. |
-| `history <ref>` | List the versions and workflow history of an item. |
-| `blocks <ref>` | Summarize the blocks of an item, nested ones included. |
-| `resolve <ref>` | Print the path, URL, and UID of an item. |
+| `delete <ref>…` | Delete items. |
+
+### Files
+
+| Command | Does |
+|---|---|
 | `upload <parent> <file>…` | Upload files as `File` or `Image` items; `--tus` uploads in chunks. |
 | `download <ref>` | Download the file or image of an item. |
-| `info` | Show the site, the user, and the Plone version. |
+
+### Site users, settings, and types
+
+| Command | Does |
+|---|---|
 | `types [type]` | List content types, or show the JSON schema of one. |
 | `vocabulary [name]` | List vocabularies, or the terms of one. |
-| `sharing <ref>` | Show the local roles of an item. |
-| `request <method> <ref>` | Send any request, for services without a command. |
-| `profile list`, `show`, `add`, `defaults`, `set-secret`, `use`, `remove`, `test` | Manage connection profiles; `add` and `defaults` take `--timeout`, `--verify` (`true`, `false`, or a CA bundle path), `--retries`, and `--backoff`. |
-| `skill show`, `skill install` | Print the agent skill, or install it in `.claude/skills`; `--user` installs it in `~/.claude/skills`, `--dir` in another skills directory. |
-| `registry list`, `get`, `set` | Read and change registry records. |
-| `users list`, `get`, `create`, `update`, `delete` | Manage users. |
-| `groups list`, `get`, `create`, `add-member`, `remove-member`, `delete` | Manage groups. |
-| `aliases list`, `add`, `remove` | Manage URL aliases. |
+| `users list`, `get` / `create`, `update`, `delete` | Browse and manage users. |
+| `groups list`, `get` / `create`, `delete` / `add-member`, `remove-member` | Browse and manage groups and their members. |
+| `registry list`, `get` / `set` | Browse and change registry records. |
+| `aliases list` / `add`, `remove` | Browse and manage URL aliases. |
 
-`<ref>` accepts a path, a URL inside the site, `uid:<UID>`, or a `resolveuid` link.
+### Advanced
+
+| Command | Does |
+|---|---|
+| `request <method> <ref>` | Send any request, for services without a command. |
+
+### Connection, profiles, and agents
+
+| Command | Does |
+|---|---|
+| `info` | Show the profile, site, and user the command line connects with, and the Plone version. |
+| `profile list`, `show` / `add`, `use`, `defaults`, `remove` / `set-secret`, `test` | Manage connection profiles; `add` and `defaults` take `--timeout`, `--verify` (`true`, `false`, or a CA bundle path), `--retries`, and `--backoff`. |
+| `skill show` / `install` | Print the agent skill, or install it in `.claude/skills`; `--user` installs it in `~/.claude/skills`, `--dir` in another skills directory. |
+
+In the group rows, `/` separates the panels of the group's help: Browse, then Write, then Membership or Connection.
 
 ## Field values
 

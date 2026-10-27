@@ -16,6 +16,7 @@ from ..exceptions import PloneForbiddenError
 from ..exceptions import PloneNotFoundError
 from ..exceptions import PloneReadOnlyError
 from ..exceptions import PloneServerError
+from .panels import ROOT_ORDER
 from .state import get_state
 from collections.abc import Iterable
 from collections.abc import Mapping
@@ -128,6 +129,44 @@ class PloneGroup(typer.core.TyperGroup):
             payload = {"error": {"type": "ValueError", "message": str(error)}}
             typer.echo(json.dumps(payload, indent=2), err=True)
             ctx.exit(2)
+
+    def format_commands(self, ctx: Any, formatter: Any) -> None:
+        """List the commands of plain help under their help panels.
+
+        Rich help draws each panel as a box; plain help, used when the output
+        is not a terminal, keeps the same grouping as titled sections.
+        """
+        commands = []
+        for name in self.list_commands(ctx):
+            command = self.get_command(ctx, name)
+            if command is not None and not command.hidden:
+                commands.append((name, command))
+        if not commands:
+            return
+        limit = formatter.width - 6 - max(len(name) for name, _ in commands)
+        sections: dict[str, list[tuple[str, str]]] = {}
+        for name, command in commands:
+            panel = getattr(command, "rich_help_panel", None) or "Commands"
+            rows = sections.setdefault(panel, [])
+            rows.append((name, command.get_short_help_str(limit)))
+        for panel, rows in sections.items():
+            with formatter.section(panel):
+                formatter.write_dl(rows)
+
+
+class RootGroup(PloneGroup):
+    """The root command group, listing commands in a curated order.
+
+    Typer lists single commands before command groups, which would split
+    the site commands (``info``, ``types``) from the site groups (``users``,
+    ``registry``). :data:`~plone_client.cli.panels.ROOT_ORDER` keeps each
+    help panel together and in a stable order.
+    """
+
+    def list_commands(self, ctx: Any) -> list[str]:
+        rank = {name: index for index, name in enumerate(ROOT_ORDER)}
+        names = super().list_commands(ctx)
+        return sorted(names, key=lambda name: rank.get(name, len(rank)))
 
 
 def project(data: Any, fields: Iterable[str]) -> Any:
