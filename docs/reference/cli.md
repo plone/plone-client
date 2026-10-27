@@ -37,6 +37,9 @@ Options marked "No" must come before the command, because `profile add` has opti
 <!-- source: src/plone_client/cli/content.py, src/plone_client/cli/site.py, src/plone_client/cli/profile.py -->
 
 `plone-client --help` lists the commands in the groups below, and each command group splits its subcommands into **Browse** (read only) and **Write** panels.
+In a terminal, the help draws each group as a box.
+When the output goes to a pipe or a file, as it does for scripts and coding agents, the help is plain text with the same groups as titled sections.
+To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 
 `<ref>` accepts a path, a URL inside the site, `uid:<UID>`, or a `resolveuid` link.
 

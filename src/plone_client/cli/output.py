@@ -130,6 +130,29 @@ class PloneGroup(typer.core.TyperGroup):
             typer.echo(json.dumps(payload, indent=2), err=True)
             ctx.exit(2)
 
+    def format_commands(self, ctx: Any, formatter: Any) -> None:
+        """List the commands of plain help under their help panels.
+
+        Rich help draws each panel as a box; plain help, used when the output
+        is not a terminal, keeps the same grouping as titled sections.
+        """
+        commands = []
+        for name in self.list_commands(ctx):
+            command = self.get_command(ctx, name)
+            if command is not None and not command.hidden:
+                commands.append((name, command))
+        if not commands:
+            return
+        limit = formatter.width - 6 - max(len(name) for name, _ in commands)
+        sections: dict[str, list[tuple[str, str]]] = {}
+        for name, command in commands:
+            panel = getattr(command, "rich_help_panel", None) or "Commands"
+            rows = sections.setdefault(panel, [])
+            rows.append((name, command.get_short_help_str(limit)))
+        for panel, rows in sections.items():
+            with formatter.section(panel):
+                formatter.write_dl(rows)
+
 
 class RootGroup(PloneGroup):
     """The root command group, listing commands in a curated order.
