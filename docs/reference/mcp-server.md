@@ -78,7 +78,7 @@ With one site, from `--site` or otherwise, tools have no `site` argument and the
 | `run_transition` | `path`, `transition`, `comment`, `include_children` | Run a workflow transition. |
 | `delete_content` | `paths` | Delete items. |
 | `create_content_with_files` | `parent`, `portal_type`, `files`, `data`, `lead_image`, `publish` | {func}`~plone_client.operations.create_with_files`; `files` are local paths. |
-| `create_page` | `parent`, `source`, `source_format`, `title`, `description`, `data`, `publish` | {func}`~plone_client.operations.create_page`. Offered only when `collective.html2blocks` is installed. |
+| `create_page` | `parent`, `source`, `source_format`, `portal_type`, `title`, `description`, `data`, `files`, `lead_image`, `publish` | {func}`~plone_client.operations.create_page`. `portal_type` defaults to `Document` and must have blocks; `content_types` lists the types addable in a folder. Offered only when `collective.html2blocks` is installed. |
 | `upload_tree` | `local_path`, `parent`, `convert_pages`, `publish` | {func}`~plone_client.operations.upload_tree`. |
 | `copy_content` | `sources`, `target` | {func}`~plone_client.operations.copy_items`. |
 | `move_content` | `sources`, `target` | {func}`~plone_client.operations.move_items`. |

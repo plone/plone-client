@@ -73,6 +73,7 @@ If one stops part way, its error has a `result` with what was already created; r
 plone-client create-page /docs page.md --publish publish        # Markdown (or --html) to blocks; # heading = title
 plone-client create-page /docs - --title "Notes" < notes.md
 plone-client create-with-files /news "News Item" lead.jpg more.jpg --title "Title" --publish publish
+plone-client create-page /news story.md --type "News Item" --file lead.jpg --publish publish   # page with files and lead image
 plone-client upload-tree ./handbook /docs --pages               # folders as pages, .md files as pages
 ```
 

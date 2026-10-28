@@ -325,6 +325,48 @@ def test_create_page_tool(client, site):
     assert site.body()["title"] == "Hello"
 
 
+@pytest.mark.skipif(
+    not mcp_server.has_html2blocks(),
+    reason="collective.html2blocks is not installed",
+)
+def test_create_page_tool_takes_a_type_and_files(client, site, tmp_path):
+    photo = tmp_path / "lead.png"
+    photo.write_bytes(b"\x89PNG\r\n\x1a\n")
+    site.add(
+        "GET", "/@types/Post", {"properties": {"blocks": {}, "preview_image_link": {}}}
+    )
+    site.add("POST", "/docs", {"@id": f"{SITE_URL}/docs/hello", "title": "Hello"})
+    site.add(
+        "POST", "/docs/hello", {"@id": f"{SITE_URL}/docs/hello/lead.png", "UID": "u1"}
+    )
+    site.add("PATCH", "/docs/hello", {})
+    result = call(
+        mcp_server.build_server(client),
+        "create_page",
+        parent="/docs",
+        source="# Hello\n\nText.",
+        portal_type="Post",
+        files=[str(photo)],
+    )
+    assert result["item"]["@id"] == f"{SITE_URL}/docs/hello"
+    assert site.body(site.requests[1])["@type"] == "Post"
+    assert site.body(site.requests[3]) == {"preview_image_link": "u1"}
+    assert result["changed"][0]["fields"] == {
+        "preview_image_link": f"{SITE_URL}/docs/hello/lead.png"
+    }
+
+
+@pytest.mark.skipif(
+    not mcp_server.has_html2blocks(),
+    reason="collective.html2blocks is not installed",
+)
+def test_create_page_tool_describes_the_type(client):
+    schema = tools(mcp_server.build_server(client))["create_page"].input_schema
+    assert "blocks" in schema["properties"]["portal_type"]["description"]
+    assert "files" in schema["properties"]
+    assert "lead_image" in schema["properties"]
+
+
 def test_site_info(client, site):
     site.add("GET", "/@actions", {"user": [{"id": "logout"}]})
     site.add("GET", "/@system", {"plone_version": "6.1.3"})

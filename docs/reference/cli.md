@@ -60,7 +60,7 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 | Command | Does |
 |---|---|
 | `create <parent> <type>` | Create an item inside a folder. |
-| `create-page <parent> <file>` | Create a page from Markdown, or HTML with `--html` or an `.html` file, converted to blocks; `-` reads standard input. Needs the `markdown` extra. |
+| `create-page <parent> <file>` | Create a page from Markdown, or HTML with `--html` or an `.html` file, converted to blocks; `-` reads standard input. `--type` picks the content type, which must have blocks; `--file` uploads files inside the page, with `--lead N` and `--no-lead` as for `create-with-files`. Needs the `markdown` extra. |
 | `create-with-files <parent> <type> <file>…` | Create an item, upload files and images inside it, and set its lead image; `--lead N` picks the Nth file, `--no-lead` sets none. |
 | `update <ref>` | Change fields of an item. |
 | `workflow <ref> [transition]` | Show the workflow state and transitions of an item, or run a transition. |

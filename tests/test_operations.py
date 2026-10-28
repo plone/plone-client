@@ -296,6 +296,86 @@ class TestCreatePage:
         with pytest.raises(PloneConfigurationError, match="'markdown' extra"):
             operations.create_page(client, "/docs", "# Title\n\nText")
 
+    @needs_html2blocks
+    def test_portal_type(self, client, fake_create):
+        operations.create_page(client, "/docs", "# Hello\n\nText.", portal_type="Post")
+        assert fake_create.body()["@type"] == "Post"
+
+    @needs_html2blocks
+    def test_files_and_lead_image(self, client, fake_create, files):
+        site = fake_create
+        site.add("GET", "/@types/Document", VOLTO_NEWS)
+        result = operations.create_page(
+            client, "/docs", "# Office\n\nText.", files=files
+        )
+        assert _calls(site) == [
+            ("GET", "/@types/Document"),
+            ("POST", "/docs"),
+            ("POST", "/docs/office"),
+            ("POST", "/docs/office"),
+            ("POST", "/docs/office"),
+            ("PATCH", "/docs/office"),
+        ]
+        assert [entry["id"] for entry in result.created] == [
+            "office",
+            "lead.png",
+            "photo.png",
+            "doc.pdf",
+        ]
+        assert result.changed == [
+            {
+                "@id": f"{SITE_URL}/docs/office",
+                "fields": {"preview_image_link": f"{SITE_URL}/docs/office/lead.png"},
+            }
+        ]
+        assert json.loads(site.requests[-1].content) == {
+            "preview_image_link": "uid-lead.png"
+        }
+
+    @needs_html2blocks
+    def test_lead_image_in_the_image_field(self, client, fake_create, files):
+        site = fake_create
+        site.add("GET", "/@types/Document", CLASSIC_NEWS)
+        result = operations.create_page(
+            client, "/docs", "# Office\n\nText.", files=files[1:], lead_image=0
+        )
+        assert site.body(site.requests[1])["image"]["filename"] == "photo.png"
+        assert [entry["id"] for entry in result.created] == ["office", "doc.pdf"]
+        assert result.changed == []
+
+    @needs_html2blocks
+    def test_no_lead_image(self, client, fake_create, files):
+        result = operations.create_page(
+            client, "/docs", "# Office\n\nText.", files=files, lead_image=None
+        )
+        assert _calls(fake_create) == [
+            ("POST", "/docs"),
+            ("POST", "/docs/office"),
+            ("POST", "/docs/office"),
+            ("POST", "/docs/office"),
+        ]
+        assert len(result.created) == 4
+        assert result.changed == []
+
+    @needs_html2blocks
+    def test_explicit_lead_needs_a_lead_field(self, client, fake_create, files):
+        fake_create.add(
+            "GET", "/@types/Document", {"properties": {"title": {}, "blocks": {}}}
+        )
+        with pytest.raises(ValueError, match="has no lead image field"):
+            operations.create_page(
+                client, "/docs", "# Office\n\nText.", files=files, lead_image=0
+            )
+        assert _calls(fake_create) == [("GET", "/@types/Document")]
+
+    @needs_html2blocks
+    def test_invalid_lead_sends_nothing(self, client, site, files):
+        with pytest.raises(ValueError, match="is not an image"):
+            operations.create_page(
+                client, "/docs", "# Office\n\nText.", files=files, lead_image=2
+            )
+        assert site.requests == []
+
 
 @pytest.mark.parametrize(
     "source,source_format,expected",
