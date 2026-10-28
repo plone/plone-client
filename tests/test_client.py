@@ -65,6 +65,12 @@ def test_urls(client_factory, api_prefix, ref, api_url, site_url):
     assert client.site_url(ref) == site_url
 
 
+def test_has_credentials(client_factory):
+    assert client_factory().has_credentials is True
+    assert client_factory(username="", password="", token="abc").has_credentials
+    assert client_factory(username="", password="").has_credentials is False
+
+
 def test_url_is_required():
     with pytest.raises(ValueError, match="URL of the site is required"):
         PloneClient("")

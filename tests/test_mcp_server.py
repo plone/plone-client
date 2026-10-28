@@ -474,3 +474,76 @@ def test_serve_closes_the_clients(sites, monkeypatch):
     monkeypatch.setattr(mcp_server.MCPServer, "run", lambda self, transport: None)
     mcp_server.serve(built)
     assert all(s.client is None for s in built)
+
+
+def test_site_info_reports_rejected_credentials(client, site):
+    site.add("GET", "/@actions", {"user": [{"id": "login"}]})
+    info = call(mcp_server.build_server(client), "site_info")
+    assert info["authenticated"] is False
+    assert info["credentials_rejected"] is True
+
+
+def test_site_info_anonymous_client_is_not_rejected(client_factory, site):
+    site.add("GET", "/@actions", {"user": [{"id": "login"}]})
+    anonymous = client_factory(username="", password="")
+    info = call(mcp_server.build_server(anonymous), "site_info")
+    assert info["credentials_rejected"] is False
+
+
+def test_instructions_warn_about_rejected_credentials(client):
+    server = mcp_server.build_server(client, rejected=("blog",))
+    assert "credentials of `blog` were rejected" in server.instructions
+    assert "plone-client profile set-secret blog" in server.instructions
+    assert "were rejected" not in mcp_server.build_server(client).instructions
+
+
+def test_rejected_sites_names_only_the_rejected(client_factory, site):
+    site.add("GET", "/@actions", {"user": [{"id": "login"}]})
+    sites = mcp_server.Sites([
+        mcp_server.Site("blog", SITE_URL, client=client_factory()),
+        mcp_server.Site(
+            "docs", SITE_URL, client=client_factory(username="", password="")
+        ),
+    ])
+    assert mcp_server.rejected_sites(sites) == ["blog"]
+
+
+def test_serve_warns_on_stderr_and_still_starts(
+    client_factory, site, monkeypatch, capsys
+):
+    site.add("GET", "/@actions", {"user": [{"id": "login"}]})
+    built, started = [], []
+
+    class FakeServer:
+        def run(self, transport: str) -> None:
+            started.append(transport)
+
+    def fake_build(target, rejected=()):
+        built.append(rejected)
+        return FakeServer()
+
+    monkeypatch.setattr(mcp_server, "build_server", fake_build)
+    mcp_server.serve(client_factory())
+    err = capsys.readouterr().err
+    assert "plone-client: warning: Credentials were rejected" in err
+    assert "profile set-secret site" in err
+    assert built == [("site",)]
+    assert started == ["stdio"]
+
+
+def test_serve_is_quiet_without_credentials(client_factory, site, monkeypatch, capsys):
+    site.add("GET", "/@actions", {"user": [{"id": "login"}]})
+    built = []
+
+    class FakeServer:
+        def run(self, transport: str) -> None:
+            pass
+
+    def fake_build(target, rejected=()):
+        built.append(rejected)
+        return FakeServer()
+
+    monkeypatch.setattr(mcp_server, "build_server", fake_build)
+    mcp_server.serve(client_factory(username="", password=""))
+    assert capsys.readouterr().err == ""
+    assert built == [()]

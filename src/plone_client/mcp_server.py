@@ -42,6 +42,7 @@ from typing import Literal
 
 import inspect
 import json
+import sys
 
 
 Tool = Callable[..., Any]
@@ -296,10 +297,34 @@ class Sites:
                 site.client = None
 
 
-def _instructions(sites: Sites) -> str:
+def rejected_sites(sites: Sites) -> list[str]:
+    """Names of the sites whose credentials the site rejects.
+
+    Connects to each site once, at startup. A site that cannot be reached, or
+    whose secret cannot be found, is left out: its tools report that when used.
+
+    :param sites: The sites.
+    :returns: Names of the sites, in order.
+    """
+    from .cli.profile import check_connection
+
+    names = []
+    for site in sites:
+        try:
+            client = sites.client(site.name)
+            report = check_connection(client, client.username)
+        except PloneClientError:
+            continue
+        if report["credentials_rejected"]:
+            names.append(site.name)
+    return names
+
+
+def _instructions(sites: Sites, rejected: tuple[str, ...] = ()) -> str:
     """Instructions for the model, with the sites and their modes.
 
     :param sites: The sites.
+    :param rejected: Names of the sites whose credentials were rejected.
     :returns: The instructions.
     """
     lines = [INSTRUCTIONS]
@@ -317,6 +342,12 @@ def _instructions(sites: Sites) -> str:
         lines.append("This server is read-only.\n")
     if sites.dry_run:
         lines.append("This server is in a dry run.\n")
+    for name in rejected:
+        lines.append(
+            f"Warning: the credentials of `{name}` were rejected. The site answers "
+            "as anonymous, so reads show only public content and changes fail. "
+            f"Ask the user to run `plone-client profile set-secret {name}`.\n"
+        )
     return "\n".join(lines)
 
 
@@ -367,11 +398,15 @@ def has_html2blocks() -> bool:
         return False
 
 
-def build_server(target: PloneClient | Sites) -> MCPServer:
+def build_server(
+    target: PloneClient | Sites, rejected: tuple[str, ...] = ()
+) -> MCPServer:
     """An MCP server whose tools work on one site or several.
 
     :param target: A client, for one site, or the sites. Each client's
         ``read_only`` and ``dry_run`` settings apply to its tools.
+    :param rejected: Names of the sites whose credentials were rejected, for
+        the instructions.
     :returns: The server, ready to ``run()``.
     """
     sites = target if isinstance(target, Sites) else Sites.from_client(target)
@@ -383,7 +418,7 @@ def build_server(target: PloneClient | Sites) -> MCPServer:
     server = MCPServer(
         name="plone-client",
         title=title,
-        instructions=_instructions(sites),
+        instructions=_instructions(sites, rejected),
         version=__version__,
         # INFO would log every HTTP request; -v still logs plone_client's
         log_level="WARNING",
@@ -791,8 +826,13 @@ def serve(target: PloneClient | Sites) -> None:
     :param target: A client, for one site, or the sites; their clients are
         closed when the server stops.
     """
+    from .cli.profile import rejected_message
+
     sites = target if isinstance(target, Sites) else Sites.from_client(target)
     try:
-        build_server(sites).run("stdio")
+        rejected = tuple(rejected_sites(sites))
+        for name in rejected:
+            sys.stderr.write(f"plone-client: warning: {rejected_message(name)}\n")
+        build_server(sites, rejected).run("stdio")
     finally:
         sites.close()

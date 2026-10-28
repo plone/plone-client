@@ -78,11 +78,13 @@ def check_connection(client: PloneClient, username: str = "") -> dict[str, Any]:
 
     Plone answers requests with wrong credentials as anonymous ones, so the
     check looks for the ``logout`` action, which only authenticated users have.
+    Credentials are rejected when the client has a username or a token and
+    the site still answers as anonymous; without any, anonymous is expected.
 
     :param client: The client.
     :param username: Login name the client uses.
-    :returns: URL, whether the client is authenticated, the user and, when
-        visible, the Plone version.
+    :returns: URL, whether the client is authenticated, the user, whether the
+        credentials were rejected and, when visible, the Plone version.
     """
     actions = client.navigation.actions(categories=["user"])
     authenticated = any(
@@ -92,6 +94,7 @@ def check_connection(client: PloneClient, username: str = "") -> dict[str, Any]:
         "url": client.url,
         "authenticated": authenticated,
         "username": username if authenticated else None,
+        "credentials_rejected": client.has_credentials and not authenticated,
         "read_only": client.read_only,
     }
     try:
@@ -99,6 +102,35 @@ def check_connection(client: PloneClient, username: str = "") -> dict[str, Any]:
     except PloneAPIError:
         result["plone_version"] = None
     return result
+
+
+def rejected_message(profile: str) -> str:
+    """Message for a profile whose credentials the site rejected.
+
+    :param profile: Name of the profile, as ``profile set-secret`` takes it.
+    :returns: The message, with the command that fixes the secret.
+    """
+    return (
+        f"Credentials were rejected: profile {profile!r} has a username or a "
+        "token, but the site answers as anonymous. Fix the secret with: "
+        f"plone-client profile set-secret {profile}"
+    )
+
+
+def emit_connection(ctx: typer.Context, payload: dict[str, Any], profile: str) -> None:
+    """Print a connection report, and exit with code 4 if credentials were rejected.
+
+    :param ctx: Typer context.
+    :param payload: The report, from :func:`check_connection`.
+    :param profile: Name of the profile to show in the message.
+    :raises typer.Exit: With code 4 (not authenticated) when the credentials
+        were rejected; the report is printed first.
+    """
+    if not payload["credentials_rejected"]:
+        emit(ctx, payload)
+        return
+    emit(ctx, {**payload, "message": rejected_message(profile)})
+    raise typer.Exit(4)
 
 
 @app.command("list", rich_help_panel=panels.BROWSE)
@@ -356,4 +388,4 @@ def test(
     profile = state.config.get(name or state.config.current_name())
     state.profile = profile.name
     result = check_connection(state.client, profile.username)
-    emit(ctx, {"profile": profile.name, **result})
+    emit_connection(ctx, {"profile": profile.name, **result}, profile.name)

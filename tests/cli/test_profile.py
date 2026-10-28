@@ -190,6 +190,7 @@ def test_test_command(invoke, memory_keyring, site):
         "url": SITE_URL,
         "authenticated": True,
         "username": "editor",
+        "credentials_rejected": False,
         "read_only": False,
         "plone_version": "6.1.5",
     }
@@ -228,3 +229,25 @@ def test_group_set_unknown_profile(invoke, memory_keyring):
     run = invoke("profile", "group-set", "sites", "blog", "nope")
     assert run.exit_code == 3
     assert "unknown profiles nope" in run.error["message"]
+
+
+def test_test_command_reports_rejected_credentials(invoke, memory_keyring, site):
+    _add(invoke)
+    site.add("GET", "/@actions", {"user": [{"id": "login", "title": "Log in"}]})
+    site.add("GET", "/@system", {"type": "Unauthorized", "message": "No"}, status=401)
+    run = invoke("profile", "test")
+    assert run.exit_code == 4
+    assert run.json["credentials_rejected"] is True
+    assert "Credentials were rejected" in run.json["message"]
+    assert "profile set-secret blog" in run.json["message"]
+
+
+def test_test_command_anonymous_profile_is_not_a_rejection(invoke, site):
+    run = invoke("profile", "add", "anon", "--url", SITE_URL)
+    assert run.exit_code == 0, run.stderr
+    site.add("GET", "/@actions", {"user": [{"id": "login", "title": "Log in"}]})
+    run = invoke("profile", "test")
+    assert run.exit_code == 0, run.stderr
+    assert run.json["authenticated"] is False
+    assert run.json["credentials_rejected"] is False
+    assert "message" not in run.json
