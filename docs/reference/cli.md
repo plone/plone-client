@@ -103,7 +103,7 @@ When one of them stops part way, the error on standard error also has a `result`
 
 | Command | Does |
 |---|---|
-| `info` | Show the profile, site, and user the command line connects with, and the Plone version. |
+| `info` | Show the profile, site, and user the command line connects with, and the Plone version. If the site rejected the profile's credentials, the output has `credentials_rejected: true` and a `message` that names the fix, and the exit code is 4. |
 | `profile list`, `show` / `add`, `use`, `defaults`, `remove` / `set-secret`, `test` | Manage connection profiles; `add` and `defaults` take `--timeout`, `--verify` (`true`, `false`, or a CA bundle path), `--retries`, and `--backoff`. |
 | `profile groups` / `group-set NAME PROFILE...`, `group-remove NAME` | List, create or replace, and remove groups of profiles; see {ref}`reference-configuration-groups`. |
 | `skill show` / `install` | Print the agent skill, or install it in `.claude/skills`; `--user` installs it in `~/.claude/skills`, `--dir` in another skills directory. |
@@ -151,7 +151,7 @@ Errors are JSON on standard error.
 | 1 | Unexpected error, or a refused confirmation. |
 | 2 | Invalid usage, invalid JSON, or a destructive command without `--yes` and without a terminal. |
 | 3 | Configuration: unknown profile, missing secret, or no site configured. |
-| 4 | Not authenticated, not allowed, or the item is locked. |
+| 4 | Not authenticated, not allowed, or the item is locked. `info` and `profile test` exit with 4 when the site rejected the profile's credentials. |
 | 5 | Not found. |
 | 6 | Invalid request or conflict. |
 | 7 | Refused by `--read-only` or a read-only profile. |

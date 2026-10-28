@@ -9,6 +9,7 @@ from .output import PloneGroup
 from .output import read_data
 from .profile import _read_secret
 from .profile import check_connection
+from .profile import emit_connection
 from .state import get_state
 from itertools import islice
 from typing import Annotated
@@ -50,7 +51,11 @@ def info(ctx: typer.Context) -> None:
     client = state.client
     profile = state.selected_profile()
     result = check_connection(client, client.username)
-    emit(ctx, {"profile": profile.name if profile else None, **result})
+    emit_connection(
+        ctx,
+        {"profile": profile.name if profile else None, **result},
+        profile.name if profile else "PROFILE",
+    )
 
 
 @commands.command(rich_help_panel=panels.SITE)

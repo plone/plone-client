@@ -90,7 +90,8 @@ def mcp(
         ) from None
     state = get_state(ctx)
     if not (site or group or every):
-        serve(state.client)
+        profile = state.selected_profile()
+        serve(Sites.from_client(state.client, name=profile.name if profile else "site"))
         return
     profiles = _profiles(state, site or [], group or [], every)
     serve(

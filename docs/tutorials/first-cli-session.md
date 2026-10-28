@@ -58,6 +58,7 @@ plone-client info
   "url": "http://localhost:8080/Plone",
   "authenticated": true,
   "username": "admin",
+  "credentials_rejected": false,
   "read_only": false,
   "plone_version": "6.1.5"
 }

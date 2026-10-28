@@ -215,7 +215,8 @@ def test_mcp_serves_the_client(invoke, monkeypatch):
     monkeypatch.setattr("plone_client.mcp_server.serve", served.append)
     run = invoke("--read-only", "mcp", "-n")
     assert run.exit_code == 0, run.stderr
-    (client,) = served
+    (sites,) = served
+    client = sites.client()
     assert (client.url, client.read_only, client.dry_run) == (SITE_URL, True, True)
 
 

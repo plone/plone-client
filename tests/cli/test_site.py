@@ -16,9 +16,32 @@ def test_info_without_profile(invoke, site):
         "url": SITE_URL,
         "authenticated": True,
         "username": "admin",
+        "credentials_rejected": False,
         "read_only": False,
         "plone_version": "6.1.5",
     }
+
+
+def test_info_reports_rejected_credentials(invoke, site):
+    site.add("GET", "/@actions", {"user": [{"id": "login"}]})
+    site.add("GET", "/@system", {"type": "Unauthorized", "message": "No"}, status=401)
+    run = invoke("info")
+    assert run.exit_code == 4
+    assert run.json["authenticated"] is False
+    assert run.json["credentials_rejected"] is True
+    assert "Credentials were rejected" in run.json["message"]
+    assert "profile set-secret PROFILE" in run.json["message"]
+
+
+def test_info_without_credentials_is_not_a_rejection(invoke, site, monkeypatch):
+    monkeypatch.delenv("PLONE_CLIENT_USERNAME")
+    monkeypatch.delenv("PLONE_CLIENT_PASSWORD")
+    site.add("GET", "/@actions", {"user": [{"id": "login"}]})
+    run = invoke("info")
+    assert run.exit_code == 0, run.stderr
+    assert run.json["authenticated"] is False
+    assert run.json["credentials_rejected"] is False
+    assert "message" not in run.json
 
 
 def test_version():

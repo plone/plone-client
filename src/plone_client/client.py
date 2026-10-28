@@ -330,6 +330,18 @@ class PloneClient:
         """Absolute URL of the API root."""
         return f"{self.url}/{self.api_prefix}" if self.api_prefix else self.url
 
+    @property
+    def has_credentials(self) -> bool:
+        """Whether the client was given a username or a token.
+
+        Plone answers wrong credentials as an anonymous request, so this says
+        whether an anonymous answer is a rejection (the command line's
+        ``info`` and ``profile test`` report it).
+
+        :returns: ``True`` if a username or a token is configured.
+        """
+        return bool(self.username or self._token)
+
     def path(self, ref: str) -> str:
         """Site path for a path or a URL of the site.
 

@@ -58,7 +58,7 @@ With one site, from `--site` or otherwise, tools have no `site` argument and the
 
 | Tool | Arguments | Returns |
 |---|---|---|
-| `site_info` | none | URL, `frontend_url`, whether the server is logged in and as whom, `read_only`, `dry_run`, and the Plone version. |
+| `site_info` | none | URL, `frontend_url`, whether the server is logged in and as whom, `credentials_rejected` (true when a username or token is configured but the site answers as anonymous), `read_only`, `dry_run`, and the Plone version. |
 | `get_content` | `path`, `fields`, `expand` | One item, without the items it contains; only the keys in `fields`, when given. |
 | `list_children` | `path`, `portal_type`, `limit` (1–500, default 50) | `items` inside a folder, in the folder's order, and `items_count`. |
 | `search` | `path`, `text`, `portal_type`, `review_state`, `depth`, `query`, `sort_on`, `descending`, `limit` (1–500, default 25) | `items` found and `items_count`. `query` holds any other catalog index. |
@@ -110,6 +110,15 @@ The tools that change a site are offered when at least one site is not read-only
 A tool that would change a read-only site is refused with `PloneReadOnlyError` before any request is sent.
 
 The server's instructions, which MCP clients pass to the model, describe the Volto content model and say which sites are read-only and whether the server is in a dry run.
+When the credentials of a site were rejected, the instructions warn about it and name the fix.
+
+### Rejected credentials
+
+Plone answers a wrong password as an anonymous request, so reads still work and only changes fail.
+When a site is configured with a username or token and answers as anonymous, `plone-client mcp` checks each site at startup and writes a warning to standard error: the server still starts.
+The same warning is in the instructions, and `site_info` reports `credentials_rejected`.
+A site with no username or token that answers as anonymous is not reported.
+Fix the secret with `plone-client profile set-secret NAME`.
 
 ## Errors
 
