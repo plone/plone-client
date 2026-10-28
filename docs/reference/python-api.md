@@ -27,7 +27,7 @@ myst:
 | Function | Requests, in order |
 |---|---|
 | {func}`~plone_client.operations.create_with_files` | `GET @types/<type>`, create the item, one upload per file, `PATCH preview_image_link` when the type keeps its lead image there, the transition, and `GET` of the item. |
-| {func}`~plone_client.operations.create_page` | Create the page, then the transition and `GET` of the page. |
+| {func}`~plone_client.operations.create_page` | Create the page, one upload per file and `PATCH preview_image_link` when the lead image goes there, then the transition and `GET` of the page. |
 | {func}`~plone_client.operations.upload_tree` | `GET` of the folder, then one create or upload per entry, depth first, and a transition after each new page. |
 | {func}`~plone_client.operations.copy_items`, {func}`~plone_client.operations.move_items` | `GET` of the folder, a `@search` count per item, `@copy` or `@move`, and a `@search` count per new item. |
 

@@ -52,6 +52,8 @@ plone-client create-page /docs getting-started.md --publish publish
 
 For HTML, pass `source_format="html"` in Python, or `--html` on the command line; a file ending in `.html` is read as HTML.
 To give the title yourself, pass `title`, or `--title`.
+To create the page as another type with blocks, pass `portal_type`, or `--type`.
+To upload files inside the page too, pass `files`, or `--file` once per file; the lead image is set as described below.
 
 ## Create an item with its images
 

@@ -87,6 +87,66 @@ def test_create_with_files(invoke, site, tmp_path):
     }
 
 
+@pytest.mark.parametrize(
+    "options,lead",
+    [((), "first"), (("--lead", "2"), 1), (("--no-lead",), None)],
+)
+def test_create_page_lead_options(invoke, monkeypatch, tmp_path, options, lead):
+    seen = {}
+
+    def fake(client, parent, source, **kwargs):
+        seen.update(kwargs, parent=parent)
+        raise ValueError("stop")
+
+    monkeypatch.setattr("plone_client.operations.create_page", fake)
+    photo = tmp_path / "a.png"
+    photo.write_bytes(b"png")
+    other = tmp_path / "b.png"
+    other.write_bytes(b"png")
+    run = invoke(
+        "create-page",
+        "/docs",
+        "-",
+        "--file",
+        str(photo),
+        "--file",
+        str(other),
+        *options,
+        stdin="# Hi",
+    )
+    assert run.exit_code == 2
+    assert seen["files"] == [photo, other]
+    assert seen["lead_image"] == lead
+    assert seen["portal_type"] == "Document"
+
+
+@needs_html2blocks
+def test_create_page_with_files(invoke, site, tmp_path):
+    photo = tmp_path / "a.png"
+    photo.write_bytes(b"\x89PNG")
+    site.add("GET", "/@types/Document", {"properties": {"preview_image_link": {}}})
+    site.add("POST", "/docs", {"@id": f"{SITE_URL}/docs/hi", "title": "Hi"})
+    site.add("POST", "/docs/hi", {"@id": f"{SITE_URL}/docs/hi/a.png", "UID": "u1"})
+    run = invoke(
+        "create-page",
+        "/docs",
+        "-",
+        "--id",
+        "hi",
+        "--file",
+        str(photo),
+        stdin="# Hi\n\nText.",
+    )
+    assert run.exit_code == 0, run.stderr
+    assert [e["@id"] for e in run.json["created"]] == [
+        f"{SITE_URL}/docs/hi",
+        f"{SITE_URL}/docs/hi/a.png",
+    ]
+    assert run.json["changed"][0]["fields"] == {
+        "preview_image_link": f"{SITE_URL}/docs/hi/a.png"
+    }
+
+
 def test_operation_failure_reports_what_was_done(invoke, site, tmp_path):
     (tmp_path / "a.txt").write_text("a")
     (tmp_path / "b.txt").write_text("b")

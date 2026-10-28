@@ -35,6 +35,33 @@ def _read_source(source: str) -> str:
     return Path(source).expanduser().read_text()
 
 
+def _lead_image(lead: int | None, no_lead: bool) -> LeadImage:
+    """The lead image asked for on the command line.
+
+    :param lead: Position of the lead image among the files, counting from 1.
+    :param no_lead: Whether there is no lead image.
+    :returns: Index of the lead image among the files, ``"first"`` or ``None``.
+    """
+    if no_lead:
+        return None
+    if lead is not None:
+        return lead - 1
+    return "first"
+
+
+LeadOption = Annotated[
+    int | None,
+    typer.Option(
+        help="Position of the lead image among the files, 1 for the first; "
+        "the first image by default.",
+        min=1,
+    ),
+]
+NoLeadOption = Annotated[
+    bool, typer.Option("--no-lead", help="Do not set a lead image.")
+]
+
+
 @commands.command("create-page", rich_help_panel=panels.CONTENT_CHANGE)
 def create_page(
     ctx: typer.Context,
@@ -58,11 +85,19 @@ def create_page(
     ] = None,
     data: DataOption = None,
     assignments: SetOption = None,
+    files: Annotated[
+        list[Path] | None,
+        typer.Option("--file", help="File or image to upload inside the page."),
+    ] = None,
+    lead: LeadOption = None,
+    no_lead: NoLeadOption = False,
     publish: PublishOption = None,
 ) -> None:
     """Create a page from Markdown or HTML, converted to blocks.
 
-    Needs the 'markdown' extra, on Python 3.12 or later.
+    Files given with --file are uploaded inside the page; the first image is
+    its lead image unless --lead or --no-lead says otherwise. Needs the
+    'markdown' extra, on Python 3.12 or later.
     """
     client = get_state(ctx).client
     is_html = html or (
@@ -77,6 +112,8 @@ def create_page(
         title=title,
         description=description,
         data=payload(data, assignments or [], id=item_id),
+        files=files or (),
+        lead_image=_lead_image(lead, no_lead),
         publish=publish,
     )
     emit(ctx, result.to_dict())
@@ -100,17 +137,8 @@ def create_with_files(
     ] = None,
     data: DataOption = None,
     assignments: SetOption = None,
-    lead: Annotated[
-        int | None,
-        typer.Option(
-            help="Position of the lead image among the files, 1 for the first; "
-            "the first image by default.",
-            min=1,
-        ),
-    ] = None,
-    no_lead: Annotated[
-        bool, typer.Option("--no-lead", help="Do not set a lead image.")
-    ] = False,
+    lead: LeadOption = None,
+    no_lead: NoLeadOption = False,
     publish: PublishOption = None,
 ) -> None:
     """Create an item with files and images inside it, and set its lead image.
@@ -119,11 +147,6 @@ def create_with_files(
     an Image inside the item that preview_image_link points to.
     """
     client = get_state(ctx).client
-    lead_image: LeadImage = "first"
-    if no_lead:
-        lead_image = None
-    elif lead is not None:
-        lead_image = lead - 1
     result = operations.create_with_files(
         client,
         parent,
@@ -132,7 +155,7 @@ def create_with_files(
         data=payload(
             data, assignments or [], title=title, description=description, id=item_id
         ),
-        lead_image=lead_image,
+        lead_image=_lead_image(lead, no_lead),
         publish=publish,
     )
     emit(ctx, result.to_dict())

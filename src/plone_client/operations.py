@@ -242,6 +242,83 @@ def _default_blocks(
     return blocks.build(blocks.title(), blocks.description())
 
 
+def _lead_target(
+    portal_type: str,
+    schema: Mapping[str, Any],
+    lead: Path | None,
+    lead_image: LeadImage,
+) -> tuple[Path | None, bool]:
+    """Where the lead image goes, given the type's schema.
+
+    :param portal_type: Content type, for the error message.
+    :param schema: ``properties`` of the type's schema.
+    :param lead: The lead image file, or ``None``.
+    :param lead_image: The ``lead_image`` the caller asked for.
+    :returns: The lead image file (``None`` when there is none), and whether
+        it goes in the ``image`` field rather than an Image inside the item.
+    :raises ValueError: If the type has no lead image and ``lead_image`` named
+        an image explicitly.
+    """
+    if lead is None:
+        return None, False
+    if "image" in schema:
+        return lead, True
+    if "preview_image_link" in schema:
+        return lead, False
+    if lead_image != "first":
+        raise ValueError(f"{portal_type} has no lead image field")
+    return None, False
+
+
+def _attach_files(
+    client: "PloneClient",
+    result: OperationResult,
+    item: Mapping[str, Any],
+    item_path: str,
+    paths: list[Path],
+    lead: Path | None,
+    in_field: bool,
+) -> None:
+    """Upload files as items inside a new item, and set its lead image.
+
+    :param client: The client.
+    :param result: The result to fill in.
+    :param item: The new item, as recorded in the result.
+    :param item_path: Site path of the new item.
+    :param paths: Files to upload, in order.
+    :param lead: The lead image file, or ``None``.
+    :param in_field: Whether the lead image is already in the ``image`` field,
+        so it is not uploaded again.
+    """
+    lead_entry: dict[str, Any] | None = None
+    for path in paths:
+        if in_field and path == lead:
+            continue
+        uploaded = client.files.upload(item_path, path)
+        entry = _created(
+            client,
+            uploaded,
+            item_path,
+            {
+                "@type": "Image" if _is_image(path) else "File",
+                "title": path.name,
+            },
+            source=str(path),
+        )
+        result.created.append(entry)
+        if path == lead:
+            lead_entry = entry
+    if lead_entry is not None:
+        target = lead_entry.get("UID") or lead_entry["@id"]
+        client.content.update(
+            item_path, preview_image_link=target, representation=False
+        )
+        result.changed.append({
+            "@id": item["@id"],
+            "fields": {"preview_image_link": lead_entry["@id"]},
+        })
+
+
 def create_with_files(
     client: "PloneClient",
     parent: str,
@@ -288,11 +365,7 @@ def create_with_files(
         schema = client.types.get(portal_type).get("properties", {})
         body = {**(data or {}), **fields}
         body.update(_default_blocks(schema, body))
-        in_field = lead is not None and "image" in schema
-        if lead is not None and not in_field and "preview_image_link" not in schema:
-            if lead_image != "first":
-                raise ValueError(f"{portal_type} has no lead image field")
-            lead = None
+        lead, in_field = _lead_target(portal_type, schema, lead, lead_image)
         if in_field and lead is not None:
             body["image"] = file_data(lead)
         answer = client.content.create(parent_path, portal_type, body)
@@ -300,33 +373,7 @@ def create_with_files(
         result.item = item
         result.created.append(item)
         item_path = client.path(item["@id"])
-        lead_entry: dict[str, Any] | None = None
-        for path in paths:
-            if in_field and path == lead:
-                continue
-            uploaded = client.files.upload(item_path, path)
-            entry = _created(
-                client,
-                uploaded,
-                item_path,
-                {
-                    "@type": "Image" if _is_image(path) else "File",
-                    "title": path.name,
-                },
-                source=str(path),
-            )
-            result.created.append(entry)
-            if path == lead:
-                lead_entry = entry
-        if lead_entry is not None:
-            target = lead_entry.get("UID") or lead_entry["@id"]
-            client.content.update(
-                item_path, preview_image_link=target, representation=False
-            )
-            result.changed.append({
-                "@id": item["@id"],
-                "fields": {"preview_image_link": lead_entry["@id"]},
-            })
+        _attach_files(client, result, item, item_path, paths, lead, in_field)
         if publish:
             client.workflow.transition(item_path, publish)
             result.changed.append({"@id": item["@id"], "transition": publish})
@@ -408,12 +455,15 @@ def create_page(
     title: str | None = None,
     description: str | None = None,
     data: Mapping[str, Any] | None = None,
+    files: Iterable[str | Path] = (),
+    lead_image: LeadImage = "first",
     publish: str | None = None,
 ) -> OperationResult:
     """Create a page from Markdown or HTML, converted to blocks.
 
     See :func:`page_data` for how the page is built. Needs the ``markdown``
-    extra (Python 3.12 or later).
+    extra (Python 3.12 or later). Files are uploaded inside the page as in
+    :func:`create_with_files`, and the lead image is set the same way.
 
     :param client: The client.
     :param parent: Path or URL of the folder.
@@ -423,22 +473,39 @@ def create_page(
     :param title: Title; the leading ``#`` heading by default.
     :param description: Description.
     :param data: More field values, such as ``id`` or ``subjects``.
+    :param files: Paths of the files to upload inside the page.
+    :param lead_image: Index of the lead image in ``files``, ``"first"``
+        for the first image (skipped when the type has no lead image), or
+        ``None`` for no lead image.
     :param publish: Workflow transition to run at the end.
     :returns: The result; ``item`` is the new page.
-    :raises ValueError: If there is no title. Nothing is sent then.
+    :raises ValueError: If there is no title, a file is missing, or the lead
+        image is not an image or cannot be stored by the type. Nothing is
+        sent then.
     :raises PloneConfigurationError: If ``collective.html2blocks`` is missing.
     :raises PloneOperationError: If a request fails.
     """
+    paths = _check_files(files)
+    lead = _pick_lead(paths, lead_image)
     body = {
         **(data or {}),
         **page_data(source, source_format, title=title, description=description),
     }
     with _operation(client, "create_page") as result:
         parent_path = client.content.resolve(parent)
+        schema = {}
+        if lead is not None:
+            schema = client.types.get(portal_type).get("properties", {})
+        lead, in_field = _lead_target(portal_type, schema, lead, lead_image)
+        if in_field and lead is not None:
+            body["image"] = file_data(lead)
         answer = client.content.create(parent_path, portal_type, body)
         item = _created(client, answer, parent_path, {"@type": portal_type, **body})
         result.item = item
         result.created.append(item)
+        _attach_files(
+            client, result, item, client.path(item["@id"]), paths, lead, in_field
+        )
         if publish:
             client.workflow.transition(client.path(item["@id"]), publish)
             result.changed.append({"@id": item["@id"], "transition": publish})

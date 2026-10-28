@@ -714,27 +714,51 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
             parent: Folder,
             source: Annotated[str, Field(description="Markdown or HTML text.")],
             source_format: Literal["markdown", "html"] = "markdown",
+            portal_type: Annotated[
+                str,
+                Field(
+                    description="Content type, with blocks. Use content_types to "
+                    "list the types addable in a folder."
+                ),
+            ] = "Document",
             title: Annotated[
                 str | None,
                 Field(description="Title; the leading # heading by default."),
             ] = None,
             description: str | None = None,
             data: Data = None,
+            files: Annotated[
+                list[str] | None,
+                Field(description="Local paths of files and images to upload."),
+            ] = None,
+            lead_image: Annotated[
+                int | Literal["first"] | None,
+                Field(
+                    description="Index in files of the lead image, 'first' for the "
+                    "first image, or null for none."
+                ),
+            ] = "first",
             publish: Publish = None,
         ) -> dict[str, Any]:
             """Create a page from Markdown or HTML, converted to Volto blocks.
 
             Headings, paragraphs, lists, quotes, links, images and tables
             become blocks. The page also gets title and description blocks.
+            Files are uploaded inside the page, and the lead image is stored
+            the way the type expects, as create_content_with_files does. The
+            type must have blocks.
             """
             result = operations.create_page(
                 client,
                 parent,
                 source,
                 source_format=source_format,
+                portal_type=portal_type,
                 title=title,
                 description=description,
                 data=data,
+                files=files or (),
+                lead_image=lead_image,
                 publish=publish,
             )
             return result.to_dict()
