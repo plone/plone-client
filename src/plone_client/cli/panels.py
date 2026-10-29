@@ -53,6 +53,7 @@ ROOT_ORDER: tuple[str, ...] = (
     # Advanced
     "request",
     "mcp",
+    "mcp-token",
     # Configuration
     "info",
     "profile",

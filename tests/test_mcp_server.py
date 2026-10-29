@@ -5,10 +5,15 @@ from plone_client import mcp_server
 from plone_client import PloneClient
 from plone_client.exceptions import PloneConfigurationError
 from plone_client.profiles import Profile
+from starlette.responses import JSONResponse
+from starlette.testclient import TestClient
 
 import asyncio
+import httpx
 import json
 import pytest
+import threading
+import time
 
 
 READ_TOOLS = {
@@ -122,6 +127,33 @@ def test_serve_refuses_unknown_tools_before_connecting(client, site, monkeypatch
     with pytest.raises(PloneConfigurationError, match="does not offer nope"):
         mcp_server.serve(client, ["nope"])
     assert site.requests == []
+
+
+def test_tools_on_one_site_run_one_at_a_time(client, site):
+    busy, most = [0], [0]
+    guard = threading.Lock()
+
+    def slow(request):
+        with guard:
+            busy[0] += 1
+            most[0] = max(most[0], busy[0])
+        time.sleep(0.2)
+        with guard:
+            busy[0] -= 1
+        return httpx.Response(200, json={"@id": f"{SITE_URL}/news"})
+
+    site.add_callable("GET", "/news", slow)
+    server = mcp_server.build_server(client)
+
+    async def both():
+        await asyncio.gather(
+            server.call_tool("get_content", {"path": "/news"}),
+            server.call_tool("get_content", {"path": "/news"}),
+        )
+
+    asyncio.run(both())
+    assert len(site.requests) == 2
+    assert most == [1]
 
 
 def test_dry_run_is_announced(client_factory):
@@ -811,3 +843,79 @@ def test_serve_is_quiet_without_credentials(client_factory, site, monkeypatch, c
     mcp_server.serve(client_factory(username="", password=""))
     assert capsys.readouterr().err == ""
     assert built == [()]
+
+
+TOKEN = "t" * 32
+INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "test", "version": "0"},
+    },
+}
+MCP_HEADERS = {"Accept": "application/json, text/event-stream"}
+
+
+async def _ok(scope, receive, send):
+    await JSONResponse({"ok": True})(scope, receive, send)
+
+
+def _guarded():
+    """A client of a bare app behind the token; no lifespan, which _ok lacks."""
+    return TestClient(mcp_server.BearerToken(_ok, TOKEN))
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"Authorization": "Bearer wrong"},
+        {"Authorization": f"Basic {TOKEN}"},
+        {"Authorization": f"Bearer {TOKEN}x"},
+        {"Authorization": "Bearer"},
+    ],
+)
+def test_bearer_token_refuses(headers):
+    response = _guarded().get("/", headers=headers)
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == 'Bearer realm="plone-client"'
+    assert response.json() == {"error": "A valid bearer token is required"}
+
+
+@pytest.mark.parametrize("scheme", ["Bearer", "bearer"])
+def test_bearer_token_accepts(scheme):
+    response = _guarded().get("/", headers={"Authorization": f"{scheme} {TOKEN}"})
+    assert response.json() == {"ok": True}
+
+
+def test_http_app_needs_the_token(client):
+    settings = mcp_server.HTTPSettings(TOKEN)
+    app = mcp_server.http_app(mcp_server.build_server(client), settings)
+    with TestClient(app, base_url="http://127.0.0.1:8000") as http:
+        refused = http.post("/mcp", json=INITIALIZE, headers=MCP_HEADERS)
+        answered = http.post(
+            "/mcp",
+            json=INITIALIZE,
+            headers={**MCP_HEADERS, "Authorization": f"Bearer {TOKEN}"},
+        )
+    assert refused.status_code == 401
+    assert answered.status_code == 200
+    assert "plone-client" in answered.text
+
+
+def test_serve_over_http(client, site, monkeypatch, capsys):
+    ran = []
+
+    def fake_run(app, **options):
+        ran.append((app, options))
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+    settings = mcp_server.HTTPSettings(TOKEN, host="192.0.2.10", port=9000)
+    mcp_server.serve(client, http=settings)
+    ((app, options),) = ran
+    assert isinstance(app, mcp_server.BearerToken)
+    assert options == {"host": "192.0.2.10", "port": 9000, "log_level": "warning"}
+    assert "serving MCP at http://192.0.2.10:9000/mcp" in capsys.readouterr().err

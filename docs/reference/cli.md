@@ -94,7 +94,8 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 | Command | Does |
 |---|---|
 | `request <method> <ref>` | Send any request, for services without a command. |
-| `mcp` | Serve sites as an MCP server over standard input and output: the selected profile, or several with `--site`, `--group`, and `--all`, offering every tool or only those named with `--tool`; see {ref}`reference-assistant-server`. Needs the `mcp` extra. |
+| `mcp` | Serve sites as an MCP server over standard input and output, or over HTTP with `--http`: the selected profile, or several with `--site`, `--group`, and `--all`, offering every tool or only those named with `--tool`; see {ref}`reference-assistant-server`. Needs the `mcp` extra. |
+| `mcp-token generate`, `set`, `delete` | Manage the token clients send to `mcp --http`, kept in the keyring; see {ref}`reference-assistant-server-http`. |
 
 `create-page`, `create-with-files`, and `upload-tree` run the operations of {mod}`plone_client.operations` and print their result: `created`, `changed`, and every request in `requests`.
 When one of them stops part way, the error on standard error also has a `result` with what was already done, and the exit code is that of the request that failed.

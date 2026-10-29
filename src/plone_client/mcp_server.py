@@ -3,13 +3,15 @@
 The server gives chat assistants and agents without a shell the same access
 the command line gives: the same profiles, secrets in the keyring, and the
 same ``read_only`` and ``dry_run`` switches. It speaks over standard input
-and output, for one site or several::
+and output, or over streamable HTTP with a bearer token, for one site or
+several::
 
     pip install 'plone-client[mcp]'
     plone-client mcp --profile blog
     plone-client mcp --site blog --site docs
     plone-client mcp --group customer
     plone-client mcp --all
+    plone-client mcp --profile blog --http --port 8000
 
 Rather than one tool per ``plone.restapi`` service, it offers the everyday
 reads, the high-level operations of :mod:`plone_client.operations`, and one
@@ -31,19 +33,27 @@ from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Iterator
 from dataclasses import dataclass
+from dataclasses import field
 from functools import wraps
 from importlib.util import find_spec
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp
+from starlette.types import Receive
+from starlette.types import Scope
+from starlette.types import Send
 from typing import Annotated
 from typing import Any
 from typing import Literal
 
+import hmac
 import inspect
 import json
 import sys
+import threading
 
 
 Tool = Callable[..., Any]
@@ -180,6 +190,9 @@ class Site:
     :param description: What the site is, for the model.
     :param read_only: Whether changes to it are refused.
     :param factory: Builds its client, on first use.
+    :param lock: Held while a tool works on the site, one tool at a time: the
+        client records the requests of an operation in one list, and block
+        edits read and write the same item.
     """
 
     name: str
@@ -188,6 +201,9 @@ class Site:
     read_only: bool = False
     factory: Callable[[], PloneClient] | None = None
     client: PloneClient | None = None
+    lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
 
     def summary(self) -> dict[str, Any]:
         """The site, as ``list_sites`` reports it.
@@ -292,13 +308,12 @@ class Sites:
     def __iter__(self) -> Iterator[Site]:
         return iter(self._sites.values())
 
-    def client(self, name: str | None = None) -> PloneClient:
-        """The client of a site, created on first use.
+    def site(self, name: str | None = None) -> Site:
+        """A site, by name.
 
         :param name: Site name; the only site when there is one.
-        :returns: The client.
-        :raises PloneConfigurationError: If the site is unknown, or its
-            secret cannot be found.
+        :returns: The site.
+        :raises PloneConfigurationError: If the site is unknown.
         """
         if name is None and not self.multiple:
             name = self.names[0]
@@ -307,6 +322,17 @@ class Sites:
             raise PloneConfigurationError(
                 f"Unknown site {name!r} (known: {', '.join(self.names)})"
             )
+        return site
+
+    def client(self, name: str | None = None) -> PloneClient:
+        """The client of a site, created on first use.
+
+        :param name: Site name; the only site when there is one.
+        :returns: The client.
+        :raises PloneConfigurationError: If the site is unknown, or its
+            secret cannot be found.
+        """
+        site = self.site(name)
         if site.client is None:
             if site.factory is None:  # no cov
                 raise PloneConfigurationError(f"Site {name!r} has no client")
@@ -402,7 +428,10 @@ def _per_site(sites: Sites, func: Tool) -> Tool:
 
     @wraps(func)
     def wrapper(**kwargs: Any) -> Any:
-        return func(sites.client(kwargs.pop("site", None)), **kwargs)
+        # The SDK runs tools in worker threads, so calls can overlap
+        site = sites.site(kwargs.pop("site", None))
+        with site.lock:
+            return func(sites.client(site.name), **kwargs)
 
     wrapper.__signature__ = signature.replace(  # type: ignore[attr-defined]
         parameters=parameters
@@ -1130,12 +1159,86 @@ def _working_copy_tools(
         return {"cancelled": path, "dry_run": client.dry_run}
 
 
-def serve(target: PloneClient | Sites, tools: Iterable[str] | None = None) -> None:
-    """Serve the tools over standard input and output.
+@dataclass
+class HTTPSettings:
+    """How the server listens over HTTP.
+
+    :param token: Token that clients send as ``Authorization: Bearer``.
+    :param host: Address to listen on. Other hosts than the loopback should
+        be reached through a proxy that adds TLS.
+    :param port: Port to listen on.
+    :param path: Path of the MCP endpoint.
+    """
+
+    token: str
+    host: str = "127.0.0.1"
+    port: int = 8000
+    path: str = "/mcp"
+
+
+class BearerToken:
+    """ASGI middleware that answers 401 to HTTP requests without the token.
+
+    The token is compared in constant time. Other ASGI scopes, such as the
+    lifespan, pass through.
+
+    :param app: The application to protect.
+    :param token: The token clients must send.
+    """
+
+    def __init__(self, app: ASGIApp, token: str) -> None:
+        self.app = app
+        self.token = token.encode()
+
+    def authorized(self, scope: Scope) -> bool:
+        """Whether a request carries the token.
+
+        :param scope: The ASGI scope of the request.
+        :returns: ``True`` for ``Authorization: Bearer <token>``.
+        """
+        headers = dict(scope.get("headers") or [])
+        scheme, _, given = headers.get(b"authorization", b"").partition(b" ")
+        return scheme.lower() == b"bearer" and hmac.compare_digest(
+            given.strip(), self.token
+        )
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and not self.authorized(scope):
+            response = JSONResponse(
+                {"error": "A valid bearer token is required"},
+                status_code=401,
+                headers={"WWW-Authenticate": 'Bearer realm="plone-client"'},
+            )
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+def http_app(server: MCPServer, settings: HTTPSettings) -> ASGIApp:
+    """The server as an ASGI application that requires the token.
+
+    :param server: The server, from :func:`build_server`.
+    :param settings: Where it listens, and its token.
+    :returns: The application.
+    """
+    app = server.streamable_http_app(
+        streamable_http_path=settings.path, host=settings.host
+    )
+    return BearerToken(app, settings.token)
+
+
+def serve(
+    target: PloneClient | Sites,
+    tools: Iterable[str] | None = None,
+    http: HTTPSettings | None = None,
+) -> None:
+    """Serve the tools over standard input and output, or over HTTP.
 
     :param target: A client, for one site, or the sites; their clients are
         closed when the server stops.
     :param tools: Names of the only tools to offer; see :func:`build_server`.
+    :param http: Serve over streamable HTTP with these settings, instead of
+        standard input and output.
     :raises PloneConfigurationError: If a tool in ``tools`` is not offered.
     """
     from .cli.profile import rejected_message
@@ -1148,6 +1251,17 @@ def serve(target: PloneClient | Sites, tools: Iterable[str] | None = None) -> No
         rejected = tuple(rejected_sites(sites))
         for name in rejected:
             sys.stderr.write(f"plone-client: warning: {rejected_message(name)}\n")
-        build_server(sites, rejected, tools).run("stdio")
+        server = build_server(sites, rejected, tools)
+        if http is None:
+            server.run("stdio")
+            return
+        import uvicorn
+
+        sys.stderr.write(
+            f"plone-client: serving MCP at http://{http.host}:{http.port}{http.path}\n"
+        )
+        uvicorn.run(
+            http_app(server, http), host=http.host, port=http.port, log_level="warning"
+        )
     finally:
         sites.close()

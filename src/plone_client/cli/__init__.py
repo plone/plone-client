@@ -23,6 +23,7 @@ app.add_typer(site.users_app, name="users", rich_help_panel=panels.SITE)
 app.add_typer(site.groups_app, name="groups", rich_help_panel=panels.SITE)
 app.add_typer(site.registry_app, name="registry", rich_help_panel=panels.SITE)
 app.add_typer(site.aliases_app, name="aliases", rich_help_panel=panels.SITE)
+app.add_typer(mcp.token_app, name="mcp-token", rich_help_panel=panels.ADVANCED)
 app.add_typer(profile.app, name="profile", rich_help_panel=panels.CONFIGURATION)
 app.add_typer(skill.app, name="skill", rich_help_panel=panels.CONFIGURATION)
 

@@ -13,6 +13,10 @@
     The command runs without a shell.
 ``none``
     No secret: the profile is anonymous.
+
+The token that MCP clients send to ``plone-client mcp --http`` is kept in the
+keyring too, under the service ``plone-client`` (no profile has that
+service), or in ``$PLONE_CLIENT_MCP_TOKEN``, which wins.
 """
 
 from .exceptions import PloneConfigurationError
@@ -20,6 +24,7 @@ from typing import Any
 from typing import TYPE_CHECKING
 
 import os
+import secrets
 import shlex
 import subprocess
 
@@ -145,6 +150,82 @@ def delete_secret(profile: "Profile") -> bool:
     keyring = _keyring()
     try:
         keyring.delete_password(keyring_service(profile), keyring_account(profile))
+    except keyring.errors.PasswordDeleteError:
+        return False
+    return True
+
+
+#: Environment variable with the token of the MCP server; wins over the keyring.
+MCP_TOKEN_ENV = "PLONE_CLIENT_MCP_TOKEN"
+#: Keyring account of the MCP server's token, under the service ``plone-client``.
+MCP_TOKEN_ACCOUNT = "mcp-token"
+#: Shortest token the MCP server accepts.
+MCP_TOKEN_MIN_LENGTH = 32
+
+
+def _check_mcp_token(value: str, origin: str) -> str:
+    """Refuse a token too short to resist guessing.
+
+    :param value: The token.
+    :param origin: Where it came from, for the message.
+    :returns: The token.
+    :raises PloneConfigurationError: If it is shorter than
+        :data:`MCP_TOKEN_MIN_LENGTH`.
+    """
+    if len(value) < MCP_TOKEN_MIN_LENGTH:
+        raise PloneConfigurationError(
+            f"The MCP token {origin} has {len(value)} characters; it needs at "
+            f"least {MCP_TOKEN_MIN_LENGTH}. Run 'plone-client mcp-token generate'"
+        )
+    return value
+
+
+def get_mcp_token() -> str:
+    """The token that MCP clients must send to the HTTP server.
+
+    :returns: ``$PLONE_CLIENT_MCP_TOKEN`` when set, or the token in the keyring.
+    :raises PloneConfigurationError: If there is none, or it is too short.
+    """
+    value = os.environ.get(MCP_TOKEN_ENV, "")
+    if value:
+        return _check_mcp_token(value, f"in ${MCP_TOKEN_ENV}")
+    value = _keyring().get_password(SERVICE_PREFIX, MCP_TOKEN_ACCOUNT) or ""
+    if not value:
+        raise PloneConfigurationError(
+            "The MCP server over HTTP needs a token: run "
+            f"'plone-client mcp-token generate', or set ${MCP_TOKEN_ENV}"
+        )
+    return _check_mcp_token(str(value), "in the keyring")
+
+
+def set_mcp_token(value: str) -> None:
+    """Store the token of the MCP server in the keyring.
+
+    :param value: The token.
+    :raises PloneConfigurationError: If it is too short.
+    """
+    _check_mcp_token(value, "given")
+    _keyring().set_password(SERVICE_PREFIX, MCP_TOKEN_ACCOUNT, value)
+
+
+def generate_mcp_token() -> str:
+    """Make a new random token for the MCP server and store it in the keyring.
+
+    :returns: The token, for the MCP clients' configuration.
+    """
+    value = secrets.token_urlsafe(32)
+    set_mcp_token(value)
+    return value
+
+
+def delete_mcp_token() -> bool:
+    """Remove the token of the MCP server from the keyring.
+
+    :returns: ``True`` if there was a token to remove.
+    """
+    keyring = _keyring()
+    try:
+        keyring.delete_password(SERVICE_PREFIX, MCP_TOKEN_ACCOUNT)
     except keyring.errors.PasswordDeleteError:
         return False
     return True

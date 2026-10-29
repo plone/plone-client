@@ -139,6 +139,34 @@ claude mcp add plone-blog-preview -- plone-client mcp --profile blog --dry-run
 
 Each tool that changes the site then returns the requests it would send.
 
+## Serve over HTTP
+
+Some assistants connect to a URL instead of starting a command.
+Make a token first; the server refuses every request without it.
+
+```shell
+plone-client mcp-token generate
+```
+
+The token is stored in the keyring and printed once, as `token`.
+Start the server with `--http`; it listens on `http://127.0.0.1:8000/mcp` unless given `--host` and `--port`.
+
+```shell
+plone-client mcp --profile blog --http
+```
+
+Then register the URL with your assistant, sending the token in the `Authorization` header.
+With Claude Code, and `jq` to read the token:
+
+```shell
+TOKEN=$(plone-client mcp-token generate | jq -r .token)
+claude mcp add --transport http plone-blog http://127.0.0.1:8000/mcp --header "Authorization: Bearer $TOKEN"
+```
+
+Generating a token replaces the one stored before, so run it again only to change the token, then restart the server.
+In a container, set `PLONE_CLIENT_MCP_TOKEN` instead of using the keyring.
+To reach the server from another machine, listen on another address with `--host`, and put a proxy that adds TLS in front of it.
+
 ## Check the connection
 
 Ask the assistant to call the `site_info` tool.
