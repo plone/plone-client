@@ -17,17 +17,22 @@ READ_TOOLS = {
     "content_types",
     "get_content",
     "get_navigation",
+    "list_blocks",
     "list_children",
     "search",
     "site_info",
 }
 WRITE_TOOLS = {
+    "add_blocks",
     "copy_content",
     "create_content",
     "create_content_with_files",
     "delete_content",
     "move_content",
+    "remove_blocks",
     "run_transition",
+    "set_blocks",
+    "update_block",
     "update_content",
     "upload_tree",
 }
@@ -64,6 +69,20 @@ def test_tools(client):
     assert found["delete_content"].annotations.destructive_hint is True
     assert found["create_content"].annotations.destructive_hint is False
     assert all(tool.description for tool in found.values())
+
+
+@pytest.mark.parametrize(
+    "name,idempotent",
+    [
+        ("update_content", True),
+        ("run_transition", False),
+        ("move_content", False),
+        ("call_service", False),
+    ],
+)
+def test_idempotent_hint(client, name, idempotent):
+    annotations = tools(mcp_server.build_server(client))[name].annotations
+    assert annotations.idempotent_hint is idempotent
 
 
 def test_read_only_server_has_no_write_tools(client_factory):
@@ -248,6 +267,89 @@ def test_create_content_dry_run(client_factory, site):
     )
     assert result["dry_run"] is True
     assert site.requests == []
+
+
+def test_create_content_takes_a_list_of_blocks(client, site):
+    site.add("POST", "/", {"@id": f"{SITE_URL}/hi", "title": "Hi"})
+    server = mcp_server.build_server(client)
+    call(
+        server,
+        "create_content",
+        parent="/",
+        portal_type="Document",
+        data={
+            "title": "Hi",
+            "blocks": [{"@type": "title"}, {"@type": "teaser", "href": "/news"}],
+        },
+    )
+    body = json.loads(site.requests[0].content)
+    ids = body["blocks_layout"]["items"]
+    assert [body["blocks"][i]["@type"] for i in ids] == ["title", "teaser"]
+    assert body["blocks"][ids[1]]["href"] == [{"@id": "/news"}]
+
+
+def test_update_content_refuses_blocks_without_type(client, site):
+    server = mcp_server.build_server(client)
+    error = tool_error(server, "update_content", path="/page", data={"blocks": [{}]})
+    assert error["error"]["type"] == "ValueError"
+    assert site.requests == []
+
+
+def page_with_blocks():
+    return {
+        "@id": f"{SITE_URL}/page",
+        "title": "Page",
+        "blocks": {"t": {"@type": "title"}, "a": {"@type": "slate", "plaintext": "Hi"}},
+        "blocks_layout": {"items": ["t", "a"]},
+    }
+
+
+def test_list_blocks(client, site):
+    site.add("GET", "/page", page_with_blocks())
+    server = mcp_server.build_server(client)
+    assert call(server, "list_blocks", path="/page") == {
+        "@id": f"{SITE_URL}/page",
+        "blocks": [
+            {"id": "t", "@type": "title"},
+            {"id": "a", "@type": "slate", "text": "Hi"},
+        ],
+    }
+
+
+def test_block_tools(client, site):
+    site.add("GET", "/page", page_with_blocks())
+    server = mcp_server.build_server(client)
+
+    added = call(
+        server, "add_blocks", path="/page", items=[{"@type": "image"}], after="t"
+    )
+    (new,) = added["changed"][0]["added"]
+    assert [entry["id"] for entry in added["item"]["blocks"]] == ["t", new, "a"]
+
+    updated = call(
+        server, "update_block", path="/page", block_id="a", data={"plaintext": "Yo"}
+    )
+    assert updated["changed"][0]["updated"] == ["a"]
+
+    removed = call(server, "remove_blocks", path="/page", block_ids=["a"])
+    assert removed["item"]["blocks"] == [{"id": "t", "@type": "title"}]
+
+    replaced = call(server, "set_blocks", path="/page", items=[{"@type": "slate"}])
+    assert [entry["@type"] for entry in replaced["item"]["blocks"]] == [
+        "title",
+        "slate",
+    ]
+    assert [r.method for r in site.requests].count("PATCH") == 4
+
+
+def test_block_tool_errors_reach_the_model(client, site):
+    site.add("GET", "/page", page_with_blocks())
+    server = mcp_server.build_server(client)
+    error = tool_error(server, "remove_blocks", path="/page", block_ids=["nope"])
+    assert error["error"] == {
+        "type": "ValueError",
+        "message": "No block 'nope' in the item",
+    }
 
 
 def test_update_transition_delete(client, site):

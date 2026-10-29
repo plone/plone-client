@@ -184,6 +184,149 @@ def teaser(target: str, title: str = "", **data: Any) -> dict[str, Any]:
     return block("teaser", href=[link], **data)
 
 
+def normalize(item: Mapping[str, Any]) -> dict[str, Any]:
+    """A block written by hand or by a model, in the shape Volto stores.
+
+    A string ``href`` becomes the list of links that teasers, buttons and
+    images keep (``[{"@id": …}]``). Blocks inside a container may be given
+    as a list, in order: they get ids and a ``blocks_layout``. Blocks inside
+    given as a mapping are normalized too, and their layout is tidied with
+    :func:`tidy`.
+
+    :param item: The block data.
+    :returns: A new block.
+    :raises ValueError: If the block, or one inside it, has no ``@type``.
+    """
+    if not isinstance(item, Mapping) or not item.get("@type"):
+        raise ValueError(f"A block needs an @type: {item!r}")
+    block = dict(item)
+    if isinstance(block.get("href"), str):
+        block["href"] = [{"@id": block["href"]}]
+    children = block.get("blocks")
+    if isinstance(children, list):
+        block.update(build(*(normalize(child) for child in children)))
+    elif isinstance(children, Mapping):
+        found = {key: normalize(child) for key, child in children.items()}
+        block.update(tidy(found, block.get("blocks_layout")))
+    return block
+
+
+def tidy(
+    blocks: Mapping[str, Any], layout: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    """``blocks`` and a ``blocks_layout`` that agree with each other.
+
+    Layout ids that name no block are dropped, and so are repeated ones;
+    blocks missing from the layout are added at the end. A title block is
+    moved first, where Volto expects it. Other keys of the layout are kept.
+
+    :param blocks: Block ids and their data.
+    :param layout: The ``blocks_layout``, if any.
+    :returns: ``blocks`` and ``blocks_layout``, as :func:`build` returns them.
+    """
+    order: list[str] = []
+    for block_id in [*((layout or {}).get("items") or []), *blocks]:
+        if block_id in blocks and block_id not in order:
+            order.append(block_id)
+    titles = [
+        block_id
+        for block_id in order
+        if isinstance(blocks[block_id], Mapping)
+        and blocks[block_id].get("@type") == "title"
+    ]
+    if titles:
+        order.remove(titles[0])
+        order.insert(0, titles[0])
+    return {"blocks": dict(blocks), "blocks_layout": {**(layout or {}), "items": order}}
+
+
+def locate(holder: Mapping[str, Any], block_id: str) -> dict[str, Any] | None:
+    """What holds a block: an item, or the container block it is in.
+
+    :param holder: The data of an item, or a block, with ``blocks``.
+    :param block_id: Id of the block to find, at any depth.
+    :returns: The mapping whose ``blocks`` holds the block, or ``None``.
+    """
+    found = holder.get("blocks")
+    if not isinstance(found, dict):
+        return None
+    if block_id in found:
+        return holder  # type: ignore[return-value]
+    for block in found.values():
+        if not isinstance(block, dict):
+            continue
+        # Containers keep their blocks either in themselves or in their data
+        for inner in (block, block.get("data")):
+            if isinstance(inner, dict):
+                hit = locate(inner, block_id)
+                if hit is not None:
+                    return hit
+    return None
+
+
+#: Keys whose value is shown as the text of a block in :func:`outline`.
+TEXT_KEYS = ("plaintext", "title", "headline", "alt")
+
+
+def outline(
+    blocks: Mapping[str, Any] | None,
+    layout: Mapping[str, Any] | None = None,
+    *,
+    width: int = 60,
+) -> list[dict[str, Any]]:
+    """A short view of blocks: their ids, types and the start of their text.
+
+    :param blocks: The ``blocks`` of an item or of a container block.
+    :param layout: The matching ``blocks_layout``.
+    :param width: Longest text to show.
+    :returns: One entry per block, in layout order, with ``id``, ``@type``,
+        maybe ``text``, and ``blocks`` for the blocks inside a container.
+    """
+    blocks = blocks or {}
+    order = list((layout or {}).get("items") or [])
+    order += [block_id for block_id in blocks if block_id not in order]
+    entries = []
+    for block_id in order:
+        block = blocks.get(block_id)
+        if not isinstance(block, dict):
+            continue
+        entry: dict[str, Any] = {"id": block_id, "@type": block.get("@type")}
+        text = next(
+            (block[key] for key in TEXT_KEYS if isinstance(block.get(key), str)), ""
+        )
+        text = " ".join(text.split())
+        if text:
+            entry["text"] = text if len(text) <= width else f"{text[: width - 1]}…"
+        for holder in (block, block.get("data")):
+            if isinstance(holder, dict) and isinstance(holder.get("blocks"), dict):
+                entry["blocks"] = outline(holder["blocks"], holder.get("blocks_layout"))
+        entries.append(entry)
+    return entries
+
+
+def prepare(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Field values whose blocks are normalized and tidied.
+
+    ``blocks`` may be a list of blocks, in order, instead of a mapping: they
+    get ids and a ``blocks_layout``, and a given ``blocks_layout`` is
+    ignored. Each block goes through :func:`normalize`, and the layout
+    through :func:`tidy`. Values without ``blocks`` are returned as they are.
+
+    :param data: Field values of an item.
+    :returns: New field values.
+    :raises ValueError: If a block has no ``@type``.
+    """
+    found = data.get("blocks")
+    if found is None:
+        return dict(data)
+    if isinstance(found, list):
+        return {**data, **build(*(normalize(block) for block in found))}
+    if not isinstance(found, Mapping):
+        raise ValueError("blocks must be a list of blocks or a mapping of ids")
+    normalized = {key: normalize(block) for key, block in found.items()}
+    return {**data, **tidy(normalized, data.get("blocks_layout"))}
+
+
 def convert(
     source: str,
     source_format: SourceFormat = "markdown",

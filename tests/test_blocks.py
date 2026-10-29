@@ -216,3 +216,164 @@ def test_convert_markdown():
     types = [page["blocks"][i]["@type"] for i in page["blocks_layout"]["items"]]
     assert types == ["title", "slate"]
     assert set(page) == {"blocks", "blocks_layout"}
+
+
+def test_normalize_turns_a_string_href_into_links():
+    block = blocks.normalize({"@type": "teaser", "href": "/news/a"})
+    assert block == {"@type": "teaser", "href": [{"@id": "/news/a"}]}
+
+
+def test_normalize_keeps_links():
+    item = {"@type": "teaser", "href": [{"@id": "/news/a", "title": "A"}]}
+    assert blocks.normalize(item) == item
+
+
+def test_normalize_builds_a_list_of_children():
+    grid = blocks.normalize({
+        "@type": "gridBlock",
+        "headline": "News",
+        "blocks": [
+            {"@type": "teaser", "href": "/news/a"},
+            {"@type": "teaser", "href": "/news/b"},
+        ],
+    })
+    ids = grid["blocks_layout"]["items"]
+    assert grid["headline"] == "News"
+    assert [grid["blocks"][i]["href"] for i in ids] == [
+        [{"@id": "/news/a"}],
+        [{"@id": "/news/b"}],
+    ]
+
+
+def test_normalize_tidies_a_mapping_of_children():
+    grid = blocks.normalize({
+        "@type": "gridBlock",
+        "blocks": {"a": {"@type": "teaser", "href": "/a"}, "b": {"@type": "image"}},
+        "blocks_layout": {"items": ["b", "gone"]},
+    })
+    assert grid["blocks_layout"] == {"items": ["b", "a"]}
+    assert grid["blocks"]["a"]["href"] == [{"@id": "/a"}]
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"href": "/a"},
+        {"@type": ""},
+        "slate",
+        {"@type": "gridBlock", "blocks": [{"href": "/a"}]},
+    ],
+)
+def test_normalize_needs_a_type(item):
+    with pytest.raises(ValueError, match="needs an @type"):
+        blocks.normalize(item)
+
+
+def test_tidy_fixes_the_layout():
+    found = {
+        "t": {"@type": "title"},
+        "a": {"@type": "slate"},
+        "b": {"@type": "slate"},
+    }
+    layout = {"items": ["a", "missing", "a", "t"], "extra": 1}
+    assert blocks.tidy(found, layout) == {
+        "blocks": found,
+        "blocks_layout": {"items": ["t", "a", "b"], "extra": 1},
+    }
+
+
+def test_tidy_without_layout_or_title():
+    found = {"a": {"@type": "slate"}, "b": {"@type": "image"}}
+    assert blocks.tidy(found)["blocks_layout"] == {"items": ["a", "b"]}
+
+
+def nested_page():
+    return {
+        "blocks": {
+            "t": {"@type": "title"},
+            "g": {
+                "@type": "gridBlock",
+                "blocks": {"g1": {"@type": "teaser", "title": "First"}},
+                "blocks_layout": {"items": ["g1"]},
+            },
+            "c": {
+                "@type": "columns",
+                "data": {
+                    "blocks": {"c1": {"@type": "slate", "plaintext": "Column"}},
+                    "blocks_layout": {"items": ["c1"]},
+                },
+            },
+            "odd": "not a block",
+        },
+        "blocks_layout": {"items": ["t", "g", "c"]},
+    }
+
+
+@pytest.mark.parametrize(
+    "block_id,holder",
+    [
+        ("t", lambda page: page),
+        ("g1", lambda page: page["blocks"]["g"]),
+        ("c1", lambda page: page["blocks"]["c"]["data"]),
+    ],
+)
+def test_locate(block_id, holder):
+    page = nested_page()
+    assert blocks.locate(page, block_id) is holder(page)
+
+
+def test_locate_misses():
+    assert blocks.locate(nested_page(), "nope") is None
+    assert blocks.locate({}, "nope") is None
+
+
+def test_outline():
+    page = nested_page()
+    assert blocks.outline(page["blocks"], page["blocks_layout"]) == [
+        {"id": "t", "@type": "title"},
+        {
+            "id": "g",
+            "@type": "gridBlock",
+            "blocks": [{"id": "g1", "@type": "teaser", "text": "First"}],
+        },
+        {
+            "id": "c",
+            "@type": "columns",
+            "blocks": [{"id": "c1", "@type": "slate", "text": "Column"}],
+        },
+    ]
+
+
+def test_outline_shortens_text():
+    found = {"a": {"@type": "slate", "plaintext": "word " * 20}}
+    entry = blocks.outline(found, width=10)[0]
+    assert entry["text"] == "word word…"
+    assert blocks.outline(None) == []
+
+
+def test_prepare_builds_a_list():
+    data = blocks.prepare({
+        "title": "Hi",
+        "blocks": [{"@type": "title"}, {"@type": "teaser", "href": "/a"}],
+        "blocks_layout": {"items": ["ignored"]},
+    })
+    ids = data["blocks_layout"]["items"]
+    assert data["title"] == "Hi"
+    assert [data["blocks"][i]["@type"] for i in ids] == ["title", "teaser"]
+    assert data["blocks"][ids[1]]["href"] == [{"@id": "/a"}]
+
+
+def test_prepare_tidies_a_mapping():
+    data = blocks.prepare({
+        "blocks": {"a": {"@type": "slate"}, "t": {"@type": "title"}},
+    })
+    assert data["blocks_layout"] == {"items": ["t", "a"]}
+
+
+def test_prepare_without_blocks():
+    assert blocks.prepare({"title": "Hi"}) == {"title": "Hi"}
+
+
+def test_prepare_refuses_other_blocks():
+    with pytest.raises(ValueError, match="list of blocks"):
+        blocks.prepare({"blocks": "slate"})

@@ -20,6 +20,7 @@ site is refused before it is sent.
 """
 
 from . import __version__
+from . import blocks
 from . import operations
 from .client import PloneClient
 from .exceptions import error_payload
@@ -61,6 +62,11 @@ Content model, mostly for sites with the Volto frontend:
   shows nothing. Use `block_types` to learn which blocks the site has and
   the data each one takes. To write prose, prefer `create_page`, which
   converts Markdown to blocks.
+- Wherever a tool takes blocks, give them as a list in order, each with an
+  `@type`; ids and the layout are made for you, and a container such as a
+  gridBlock may list its own `blocks` the same way. To change a page,
+  `list_blocks` shows its block ids; then `add_blocks`, `update_block` and
+  `remove_blocks` change only those blocks.
 - There is no Folder type: Document (Page) is folderish, and so is News Item.
 - A News Item has no `image` field: its lead image is `preview_image_link`, a
   relation to an Image stored inside it. Use `create_content_with_files`.
@@ -82,6 +88,13 @@ CHANGE = ToolAnnotations(
     idempotent_hint=True,
     open_world_hint=False,
 )
+# A transition or a move fails when repeated, so a retry is not safe
+ACTION = ToolAnnotations(
+    read_only_hint=False,
+    destructive_hint=True,
+    idempotent_hint=False,
+    open_world_hint=False,
+)
 DELETE = ToolAnnotations(
     read_only_hint=False, destructive_hint=True, open_world_hint=False
 )
@@ -96,7 +109,18 @@ Publish = Annotated[
 ]
 Data = Annotated[
     dict[str, Any] | None,
-    Field(description="Field values, such as title, description or subjects."),
+    Field(
+        description="Field values, such as title, description or subjects. "
+        "blocks may be a list of blocks in order, each with an @type."
+    ),
+]
+Blocks = Annotated[
+    list[dict[str, Any]],
+    Field(
+        description="Blocks in order, each with an @type, such as "
+        '{"@type": "teaser", "href": "/news/item"}. block_types describes '
+        "the data of each block."
+    ),
 ]
 
 
@@ -446,18 +470,19 @@ def build_server(
             return {"items": [site.summary() for site in sites]}
 
         server.add_tool(list_sites, annotations=READ)
-    _read_tools(add(READ), add(CHANGE))
+    _read_tools(add(READ), add(ACTION))
+    _block_tools(add, sites.writable)
     if sites.writable:
         _write_tools(add)
         _operation_tools(add)
     return server
 
 
-def _read_tools(read: Register, change: Register) -> None:
+def _read_tools(read: Register, action: Register) -> None:
     """Register the tools that only read, and the generic service tool.
 
     :param read: Registers a read-only tool.
-    :param change: Registers a tool that may change the site.
+    :param action: Registers a tool that may change the site.
     """
 
     @read
@@ -611,7 +636,7 @@ def _read_tools(read: Register, change: Register) -> None:
         """
         return client.block_types.markdown(block_id, path)
 
-    @change
+    @action
     def call_service(
         client: PloneClient,
         method: Literal["GET", "POST", "PATCH", "PUT", "DELETE"],
@@ -655,7 +680,7 @@ def _write_tools(add: Callable[[ToolAnnotations], Register]) -> None:
         For pages written in Markdown use create_page, and for items with
         images use create_content_with_files.
         """
-        item = client.content.create(parent, portal_type, data or {})
+        item = client.content.create(parent, portal_type, blocks.prepare(data or {}))
         if publish and not client.dry_run:
             client.workflow.transition(item["@id"], publish)
             item = client.content.get(item["@id"], include_items=False)
@@ -665,11 +690,15 @@ def _write_tools(add: Callable[[ToolAnnotations], Register]) -> None:
     def update_content(
         client: PloneClient, path: ItemPath, data: Data
     ) -> dict[str, Any]:
-        """Change field values of a content item; other fields are kept."""
-        item = client.content.update(path, data or {})
+        """Change field values of a content item; other fields are kept.
+
+        Giving blocks replaces all of them; to change some, use add_blocks,
+        update_block or remove_blocks.
+        """
+        item = client.content.update(path, blocks.prepare(data or {}))
         return _summary(item or {})
 
-    @add(CHANGE)
+    @add(ACTION)
     def run_transition(
         client: PloneClient,
         path: ItemPath,
@@ -831,7 +860,7 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
         """
         return operations.copy_items(client, sources, target).to_dict()
 
-    @add(CHANGE)
+    @add(ACTION)
     def move_content(
         client: PloneClient,
         sources: Annotated[list[str], Field(description="Items to move.")],
@@ -842,6 +871,95 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
         Their URLs change; Plone redirects the old ones.
         """
         return operations.move_items(client, sources, target).to_dict()
+
+
+def _block_tools(add: Callable[[ToolAnnotations], Register], writable: bool) -> None:
+    """Register the tools that read and change the blocks of an item.
+
+    :param add: Registers a tool with its annotations.
+    :param writable: Whether to register the tools that change blocks.
+    """
+
+    @add(READ)
+    def list_blocks(client: PloneClient, path: ItemPath) -> dict[str, Any]:
+        """The blocks of an item, in order: id, type and the start of their
+        text, with the blocks inside containers.
+
+        Use the ids with add_blocks, update_block and remove_blocks; read a
+        block's full data with get_content and fields ['blocks'].
+        """
+        item = client.content.get(path, include_items=False)
+        return {
+            "@id": item["@id"],
+            "blocks": blocks.outline(item.get("blocks"), item.get("blocks_layout")),
+        }
+
+    if not writable:
+        return
+
+    @add(CREATE)
+    def add_blocks(
+        client: PloneClient,
+        path: ItemPath,
+        items: Blocks,
+        after: Annotated[
+            str | None,
+            Field(
+                description="Id of the block to add them after, in the same "
+                "container; list_blocks shows the ids."
+            ),
+        ] = None,
+        position: Annotated[
+            int | None,
+            Field(ge=0, description="Index among the item's blocks; 0 is the top."),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Add blocks to an item, keeping the blocks it has.
+
+        They go after the block given, at the position given, or at the end.
+        Returns the new block ids and an outline of the item's blocks.
+        """
+        return operations.add_blocks(
+            client, path, items, after=after, position=position
+        ).to_dict()
+
+    @add(CHANGE)
+    def update_block(
+        client: PloneClient,
+        path: ItemPath,
+        block_id: Annotated[str, Field(description="Id of the block.")],
+        data: Annotated[
+            dict[str, Any], Field(description="Values to merge into the block.")
+        ],
+        replace: Annotated[
+            bool,
+            Field(description="Replace the block's data instead of merging."),
+        ] = False,
+    ) -> dict[str, Any]:
+        """Change the data of one block, also inside a container."""
+        return operations.update_block(
+            client, path, block_id, data, replace=replace
+        ).to_dict()
+
+    @add(DELETE)
+    def remove_blocks(
+        client: PloneClient,
+        path: ItemPath,
+        block_ids: Annotated[list[str], Field(description="Ids of the blocks.")],
+    ) -> dict[str, Any]:
+        """Remove blocks from an item, with any blocks inside them."""
+        return operations.remove_blocks(client, path, block_ids).to_dict()
+
+    @add(CHANGE)
+    def set_blocks(
+        client: PloneClient, path: ItemPath, items: Blocks
+    ) -> dict[str, Any]:
+        """Replace all the blocks of an item.
+
+        Its title and description blocks stay at the top unless the new
+        blocks include blocks of those types.
+        """
+        return operations.set_blocks(client, path, items).to_dict()
 
 
 def serve(target: PloneClient | Sites) -> None:
