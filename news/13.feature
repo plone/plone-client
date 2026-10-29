@@ -1,1 +1,0 @@
-Added a warning when a profile's credentials are rejected: a profile with a username or token that the site answers as anonymous now makes `plone-client mcp` warn at startup, `site_info` report `credentials_rejected`, and `info` and `profile test` report it with exit code 4, with the command that fixes the secret. @ericof

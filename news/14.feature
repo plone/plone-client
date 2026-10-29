@@ -1,1 +1,0 @@
-Added `files` and `lead_image` to `create_page`, in the operation, the MCP tool and the `create-page` command (`--file`, `--lead`, `--no-lead`), so a page can carry uploaded files and a lead image, stored the way the type expects. @ericof

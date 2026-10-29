@@ -1,1 +1,0 @@
-The MCP tools `run_transition`, `move_content`, and `call_service` no longer tell clients that they are idempotent: running them twice does not give the same result, so clients should not retry them on their own. @ericof

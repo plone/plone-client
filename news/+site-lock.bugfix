@@ -1,1 +1,0 @@
-MCP tools that work on the same site now run one at a time. Assistants that call several tools at once could mix the requests that two operations reported, or lose a block edit made at the same moment. @ericof

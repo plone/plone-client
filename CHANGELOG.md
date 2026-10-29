@@ -9,6 +9,26 @@
 
 <!-- towncrier release notes start -->
 
+## 1.0.0a2 (2026-10-28)
+
+
+### New features:
+
+- Added a `portal_type` argument to the `create_page` MCP tool, so a page can be created as a content type with blocks other than `Document`. @ericof [#12](https://github.com/plone/plone-client/issues/12)
+- Added a warning when a profile's credentials are rejected: a profile with a username or token that the site answers as anonymous now makes `plone-client mcp` warn at startup, `site_info` report `credentials_rejected`, and `info` and `profile test` report it with exit code 4, with the command that fixes the secret. @ericof [#13](https://github.com/plone/plone-client/issues/13)
+- Added `files` and `lead_image` to `create_page`, in the operation, the MCP tool and the `create-page` command (`--file`, `--lead`, `--no-lead`), so a page can carry uploaded files and a lead image, stored the way the type expects. @ericof [#14](https://github.com/plone/plone-client/issues/14)
+- Added MCP tools for services the client already wrapped: `get_workflow` lists the transitions an item can run now, `get_vocabulary` returns the valid values of a choice field, `get_translations`, `link_translation`, and `unlink_translation` manage translations, and `get_working_copy`, `check_out`, `check_in`, and `cancel_working_copy` manage working copies. @ericof [#17](https://github.com/plone/plone-client/issues/17)
+- Added the `--tool` option to `plone-client mcp`, which offers only the tools named, so the model reads a shorter list of tools. A tool the server would not offer, such as a misspelled one or a tool that changes a read-only site, stops the command with exit code 3. @ericof [#17](https://github.com/plone/plone-client/issues/17)
+- Added MCP tools to edit the blocks of a page without resending all of them: `list_blocks` shows their ids and types, `add_blocks` inserts blocks after a given block or at a position, `update_block` changes one block, `remove_blocks` deletes blocks, and `set_blocks` replaces them while keeping the title and description blocks. They also work on blocks inside grids and other containers. Blocks can now be given as a list, each with an `@type`, to these tools and to `create_content` and `update_content`: ids and the layout are made for you, a string `href` becomes a list of links, and a block without `@type` is refused before anything is sent. The same steps are in the library as `operations.add_blocks`, `update_block`, `remove_blocks`, and `set_blocks`, with the helpers `blocks.normalize`, `tidy`, `locate`, `outline`, and `prepare`. @ericof [#17](https://github.com/plone/plone-client/issues/17)
+- Added `plone-client mcp --http`, which serves the MCP server over streamable HTTP for assistants that connect to a URL. Every request needs a bearer token, made with `plone-client mcp-token generate` and kept in the keyring, or given in `PLONE_CLIENT_MCP_TOKEN`. The server listens on `127.0.0.1:8000` unless given `--host` and `--port`, and the sites' own credentials stay in its profiles. @ericof [#18](https://github.com/plone/plone-client/issues/18)
+- Added a choice of the block types that Markdown and HTML become, such as code blocks or tables as text: a `blocks` table in a profile sets them for a site, and `--blocks` on `create-page` and `upload-tree`, the `blocks` argument of the MCP tools `create_page` and `upload_tree`, or `blocks_setting` in Python changes them for one call. An unknown block type or option is refused before any request is sent. The `markdown` extra now needs `collective.html2blocks` 1.0.0b1 or later. @ericof [#20](https://github.com/plone/plone-client/issues/20)
+
+
+### Bug fixes:
+
+- The MCP tools `run_transition`, `move_content`, and `call_service` no longer tell clients that they are idempotent: running them twice does not give the same result, so clients should not retry them on their own. @ericof [#17](https://github.com/plone/plone-client/issues/17)
+- MCP tools that work on the same site now run one at a time. Assistants that call several tools at once could mix the requests that two operations reported, or lose a block edit made at the same moment. @ericof 
+
 ## 1.0.0a1 (2026-10-27)
 
 
