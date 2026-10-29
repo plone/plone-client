@@ -1,7 +1,10 @@
 from plone_client import blocks
+from plone_client import mcp_server
+from plone_client import operations
 from plone_client import PloneBadRequestError
 from plone_client import PloneNotFoundError
 
+import asyncio
 import pytest
 
 
@@ -86,3 +89,60 @@ def test_users_and_groups(plone):
         assert "integration" in plone.groups.get("Reviewers")["members"]["items"]
     finally:
         plone.users.delete("integration", delete_memberareas=False)
+
+
+def _call(server, name, **arguments):
+    result = asyncio.run(server.call_tool(name, arguments))
+    assert not result.is_error
+    return result.structured_content
+
+
+def test_mcp_workflow_and_vocabulary(plone, folder):
+    server = mcp_server.build_server(plone)
+    found = _call(server, "get_workflow", path=folder)
+    assert found["state"]["id"] == "private"
+    assert "publish" in {entry["id"] for entry in found["transitions"]}
+
+    terms = _call(
+        server,
+        "get_vocabulary",
+        vocabulary="plone.app.vocabularies.ReallyUserFriendlyTypes",
+        limit=5,
+    )
+    assert len(terms["items"]) == 5
+    assert terms["items_total"] > 5
+    assert {"token", "title"} <= set(terms["items"][0])
+
+
+def _stored(plone, path):
+    item = plone.content.get(path, include_items=False)
+    return item["blocks"], item["blocks_layout"]["items"]
+
+
+def test_block_operations(plone, folder):
+    page = blocks.build(blocks.title(), blocks.description(), blocks.text("First"))
+    plone.content.update(folder, page)
+    title, description, first = page["blocks_layout"]["items"]
+
+    grid = {"@type": "gridBlock", "blocks": [{"@type": "teaser", "href": folder}]}
+    result = operations.add_blocks(plone, folder, [grid], after=description)
+    (grid_id,) = result.changed[0]["added"]
+    found, order = _stored(plone, folder)
+    assert order == [title, description, grid_id, first]
+    (teaser_id,) = found[grid_id]["blocks_layout"]["items"]
+    assert found[grid_id]["blocks"][teaser_id]["href"][0]["@id"].endswith(folder)
+
+    operations.update_block(plone, folder, teaser_id, {"overwrite": True})
+    found, _ = _stored(plone, folder)
+    assert found[grid_id]["blocks"][teaser_id]["overwrite"] is True
+
+    operations.remove_blocks(plone, folder, [first])
+    found, order = _stored(plone, folder)
+    assert order == [title, description, grid_id]
+    assert first not in found
+
+    result = operations.set_blocks(plone, folder, [{"@type": "slate"}])
+    (slate,) = result.changed[0]["added"]
+    found, order = _stored(plone, folder)
+    assert order == [title, description, slate]
+    assert set(found) == {title, description, slate}

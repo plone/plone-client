@@ -35,6 +35,7 @@ from .exceptions import PloneAPIError
 from .exceptions import PloneClientError
 from .exceptions import PloneOperationError
 from .managers.files import file_data
+from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Iterator
 from collections.abc import Mapping
@@ -46,6 +47,7 @@ from typing import Any
 from typing import Literal
 from typing import TYPE_CHECKING
 
+import copy
 import mimetypes
 import re
 import unicodedata
@@ -751,3 +753,217 @@ def move_items(
     :raises PloneOperationError: If a request fails.
     """
     return _transfer(client, "move", sources, target)
+
+
+BlockEdit = Callable[[dict[str, Any]], dict[str, Any]]
+
+
+def _edit_blocks(
+    client: "PloneClient", ref: str, name: str, edit: BlockEdit
+) -> OperationResult:
+    """Read the blocks of an item, change them, and save them in one request.
+
+    The change runs on a copy and may raise ``ValueError`` to refuse it;
+    nothing is sent then. The layout is tidied with
+    :func:`~plone_client.blocks.tidy` before saving. The blocks are read and
+    written back without a lock, so a change made by someone else in between
+    is lost.
+
+    :param client: The client.
+    :param ref: Path or URL of the item.
+    :param name: Name of the operation.
+    :param edit: Changes ``blocks`` and ``blocks_layout`` in place, and
+        returns what changed, for the result.
+    :returns: The result; ``item`` has an outline of the saved blocks.
+    :raises ValueError: If the item has no blocks, or the change is refused.
+    :raises PloneOperationError: If a request fails.
+    """
+    with _operation(client, name) as result:
+        path = client.content.resolve(ref)
+        item = client.content.get(path, include_items=False)
+        if not isinstance(item.get("blocks"), dict):
+            raise ValueError(f"{path} has no blocks")
+        data = {
+            "blocks": copy.deepcopy(item["blocks"]),
+            "blocks_layout": copy.deepcopy(item.get("blocks_layout") or {}),
+        }
+        details = edit(data)
+        data = blocks.tidy(data["blocks"], data["blocks_layout"])
+        client.content.update(path, data, representation=False)
+        result.changed.append({"@id": item["@id"], **details})
+        result.item = _summary(
+            item, blocks=blocks.outline(data["blocks"], data["blocks_layout"])
+        )
+    return result
+
+
+def _holder(data: dict[str, Any], block_id: str) -> dict[str, Any]:
+    """What holds a block, with a layout to change.
+
+    :param data: ``blocks`` and ``blocks_layout`` of an item.
+    :param block_id: Id of the block.
+    :returns: The item data or the container block that holds it.
+    :raises ValueError: If there is no such block.
+    """
+    holder = blocks.locate(data, block_id)
+    if holder is None:
+        raise ValueError(f"No block {block_id!r} in the item")
+    layout = holder.setdefault("blocks_layout", {})
+    layout.setdefault("items", list(holder["blocks"]))
+    return holder
+
+
+def add_blocks(
+    client: "PloneClient",
+    ref: str,
+    items: Iterable[Mapping[str, Any]],
+    *,
+    after: str | None = None,
+    position: int | None = None,
+) -> OperationResult:
+    """Add blocks to an item, keeping the blocks it has.
+
+    The blocks are normalized with :func:`~plone_client.blocks.normalize`,
+    so a container may list the blocks inside it. They go after the block
+    ``after``, in the same container as it, or at ``position`` among the item's own
+    blocks, or at the end.
+
+    :param client: The client.
+    :param ref: Path or URL of the item.
+    :param items: The blocks, in order, each with an ``@type``.
+    :param after: Id of the block to add them after.
+    :param position: Index in the item's layout; ``0`` is the top.
+    :returns: The result; its changed entry lists the ``added`` ids.
+    :raises ValueError: If a block has no ``@type``, both ``after`` and
+        ``position`` are given, ``after`` names no block, or ``position`` is
+        outside the layout. Nothing is changed then.
+    :raises PloneOperationError: If a request fails.
+    """
+    if after is not None and position is not None:
+        raise ValueError("Give either after or position, not both")
+    built = blocks.build(*(blocks.normalize(item) for item in items))
+    if not built["blocks"]:
+        raise ValueError("No blocks to add")
+    ids = built["blocks_layout"]["items"]
+
+    def edit(data: dict[str, Any]) -> dict[str, Any]:
+        holder = _holder(data, after) if after is not None else data
+        order = holder.setdefault("blocks_layout", {}).setdefault(
+            "items", list(holder["blocks"])
+        )
+        if after is not None:
+            index = order.index(after) + 1 if after in order else len(order)
+        elif position is not None:
+            if not 0 <= position <= len(order):
+                raise ValueError(
+                    f"position must be between 0 and {len(order)}, not {position}"
+                )
+            index = position
+        else:
+            index = len(order)
+        holder["blocks"].update(built["blocks"])
+        order[index:index] = ids
+        return {"added": ids}
+
+    return _edit_blocks(client, ref, "add_blocks", edit)
+
+
+def update_block(
+    client: "PloneClient",
+    ref: str,
+    block_id: str,
+    data: Mapping[str, Any],
+    *,
+    replace: bool = False,
+) -> OperationResult:
+    """Change the data of one block, at any depth.
+
+    :param client: The client.
+    :param ref: Path or URL of the item.
+    :param block_id: Id of the block.
+    :param data: Values to merge into the block, or, with ``replace``, its
+        new data. The ``@type`` is kept unless ``data`` has one.
+    :param replace: Replace the block's data instead of merging into it.
+    :returns: The result; its changed entry lists the ``updated`` id.
+    :raises ValueError: If there is no such block. Nothing is changed then.
+    :raises PloneOperationError: If a request fails.
+    """
+
+    def edit(found: dict[str, Any]) -> dict[str, Any]:
+        holder = _holder(found, block_id)
+        old = holder["blocks"][block_id]
+        base = {"@type": old.get("@type")} if replace else old
+        holder["blocks"][block_id] = blocks.normalize({**base, **data})
+        return {"updated": [block_id]}
+
+    return _edit_blocks(client, ref, "update_block", edit)
+
+
+def remove_blocks(
+    client: "PloneClient", ref: str, block_ids: str | Iterable[str]
+) -> OperationResult:
+    """Remove blocks from an item, at any depth, with the blocks inside them.
+
+    :param client: The client.
+    :param ref: Path or URL of the item.
+    :param block_ids: Id of a block, or several.
+    :returns: The result; its changed entry lists the ``removed`` ids.
+    :raises ValueError: If a block is not found. Nothing is changed then.
+    :raises PloneOperationError: If a request fails.
+    """
+    ids = [block_ids] if isinstance(block_ids, str) else list(block_ids)
+
+    def edit(data: dict[str, Any]) -> dict[str, Any]:
+        for block_id in ids:
+            holder = _holder(data, block_id)
+            del holder["blocks"][block_id]
+            order = holder["blocks_layout"]["items"]
+            if block_id in order:
+                order.remove(block_id)
+        return {"removed": ids}
+
+    return _edit_blocks(client, ref, "remove_blocks", edit)
+
+
+#: Blocks that show fields of the item, kept by :func:`set_blocks`.
+FIELD_BLOCKS = ("title", "description")
+
+
+def set_blocks(
+    client: "PloneClient", ref: str, items: Iterable[Mapping[str, Any]]
+) -> OperationResult:
+    """Replace all the blocks of an item.
+
+    The item's title and description blocks are kept at the top unless the
+    new blocks have blocks of those types, so the page keeps showing its
+    title.
+
+    :param client: The client.
+    :param ref: Path or URL of the item.
+    :param items: The new blocks, in order, each with an ``@type``; see
+        :func:`~plone_client.blocks.normalize`.
+    :returns: The result; its changed entry lists the ``added`` ids and the
+        ``removed`` ones.
+    :raises ValueError: If a block has no ``@type``. Nothing is changed then.
+    :raises PloneOperationError: If a request fails.
+    """
+    built = blocks.build(*(blocks.normalize(item) for item in items))
+    given = {block["@type"] for block in built["blocks"].values()}
+
+    def edit(data: dict[str, Any]) -> dict[str, Any]:
+        old = blocks.tidy(data["blocks"], data["blocks_layout"])
+        kept = [
+            block_id
+            for block_id in old["blocks_layout"]["items"]
+            if data["blocks"][block_id].get("@type") in FIELD_BLOCKS
+            and data["blocks"][block_id].get("@type") not in given
+        ]
+        removed = [block_id for block_id in data["blocks"] if block_id not in kept]
+        data["blocks"] = {
+            **{block_id: data["blocks"][block_id] for block_id in kept},
+            **built["blocks"],
+        }
+        data["blocks_layout"]["items"] = kept + built["blocks_layout"]["items"]
+        return {"added": built["blocks_layout"]["items"], "removed": removed}
+
+    return _edit_blocks(client, ref, "set_blocks", edit)

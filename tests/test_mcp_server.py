@@ -17,17 +17,31 @@ READ_TOOLS = {
     "content_types",
     "get_content",
     "get_navigation",
+    "get_translations",
+    "get_vocabulary",
+    "get_workflow",
+    "get_working_copy",
+    "list_blocks",
     "list_children",
     "search",
     "site_info",
 }
 WRITE_TOOLS = {
+    "add_blocks",
+    "cancel_working_copy",
+    "check_in",
+    "check_out",
     "copy_content",
     "create_content",
     "create_content_with_files",
     "delete_content",
+    "link_translation",
     "move_content",
+    "remove_blocks",
     "run_transition",
+    "set_blocks",
+    "unlink_translation",
+    "update_block",
     "update_content",
     "upload_tree",
 }
@@ -66,10 +80,48 @@ def test_tools(client):
     assert all(tool.description for tool in found.values())
 
 
+@pytest.mark.parametrize(
+    "name,idempotent",
+    [
+        ("update_content", True),
+        ("run_transition", False),
+        ("move_content", False),
+        ("call_service", False),
+    ],
+)
+def test_idempotent_hint(client, name, idempotent):
+    annotations = tools(mcp_server.build_server(client))[name].annotations
+    assert annotations.idempotent_hint is idempotent
+
+
 def test_read_only_server_has_no_write_tools(client_factory):
     server = mcp_server.build_server(client_factory(read_only=True))
     assert set(tools(server)) == READ_TOOLS
     assert "This server is read-only." in server.instructions
+
+
+def test_only_some_tools(client):
+    server = mcp_server.build_server(client, tools=["search", "add_blocks"])
+    assert set(tools(server)) == {"search", "add_blocks"}
+
+
+def test_list_sites_is_always_offered(sites):
+    server = mcp_server.build_server(sites(), tools=["search"])
+    assert set(tools(server)) == {"list_sites", "search"}
+
+
+@pytest.mark.parametrize("read_only,name", [(False, "nope"), (True, "add_blocks")])
+def test_tools_the_server_does_not_offer(client_factory, read_only, name):
+    client = client_factory(read_only=read_only)
+    with pytest.raises(PloneConfigurationError, match=f"does not offer {name} "):
+        mcp_server.build_server(client, tools=["search", name])
+
+
+def test_serve_refuses_unknown_tools_before_connecting(client, site, monkeypatch):
+    monkeypatch.setattr(mcp_server.MCPServer, "run", lambda self, transport: None)
+    with pytest.raises(PloneConfigurationError, match="does not offer nope"):
+        mcp_server.serve(client, ["nope"])
+    assert site.requests == []
 
 
 def test_dry_run_is_announced(client_factory):
@@ -248,6 +300,176 @@ def test_create_content_dry_run(client_factory, site):
     )
     assert result["dry_run"] is True
     assert site.requests == []
+
+
+def test_create_content_takes_a_list_of_blocks(client, site):
+    site.add("POST", "/", {"@id": f"{SITE_URL}/hi", "title": "Hi"})
+    server = mcp_server.build_server(client)
+    call(
+        server,
+        "create_content",
+        parent="/",
+        portal_type="Document",
+        data={
+            "title": "Hi",
+            "blocks": [{"@type": "title"}, {"@type": "teaser", "href": "/news"}],
+        },
+    )
+    body = json.loads(site.requests[0].content)
+    ids = body["blocks_layout"]["items"]
+    assert [body["blocks"][i]["@type"] for i in ids] == ["title", "teaser"]
+    assert body["blocks"][ids[1]]["href"] == [{"@id": "/news"}]
+
+
+def test_update_content_refuses_blocks_without_type(client, site):
+    server = mcp_server.build_server(client)
+    error = tool_error(server, "update_content", path="/page", data={"blocks": [{}]})
+    assert error["error"]["type"] == "ValueError"
+    assert site.requests == []
+
+
+def page_with_blocks():
+    return {
+        "@id": f"{SITE_URL}/page",
+        "title": "Page",
+        "blocks": {"t": {"@type": "title"}, "a": {"@type": "slate", "plaintext": "Hi"}},
+        "blocks_layout": {"items": ["t", "a"]},
+    }
+
+
+def test_list_blocks(client, site):
+    site.add("GET", "/page", page_with_blocks())
+    server = mcp_server.build_server(client)
+    assert call(server, "list_blocks", path="/page") == {
+        "@id": f"{SITE_URL}/page",
+        "blocks": [
+            {"id": "t", "@type": "title"},
+            {"id": "a", "@type": "slate", "text": "Hi"},
+        ],
+    }
+
+
+def test_block_tools(client, site):
+    site.add("GET", "/page", page_with_blocks())
+    server = mcp_server.build_server(client)
+
+    added = call(
+        server, "add_blocks", path="/page", items=[{"@type": "image"}], after="t"
+    )
+    (new,) = added["changed"][0]["added"]
+    assert [entry["id"] for entry in added["item"]["blocks"]] == ["t", new, "a"]
+
+    updated = call(
+        server, "update_block", path="/page", block_id="a", data={"plaintext": "Yo"}
+    )
+    assert updated["changed"][0]["updated"] == ["a"]
+
+    removed = call(server, "remove_blocks", path="/page", block_ids=["a"])
+    assert removed["item"]["blocks"] == [{"id": "t", "@type": "title"}]
+
+    replaced = call(server, "set_blocks", path="/page", items=[{"@type": "slate"}])
+    assert [entry["@type"] for entry in replaced["item"]["blocks"]] == [
+        "title",
+        "slate",
+    ]
+    assert [r.method for r in site.requests].count("PATCH") == 4
+
+
+def test_block_tool_errors_reach_the_model(client, site):
+    site.add("GET", "/page", page_with_blocks())
+    server = mcp_server.build_server(client)
+    error = tool_error(server, "remove_blocks", path="/page", block_ids=["nope"])
+    assert error["error"] == {
+        "type": "ValueError",
+        "message": "No block 'nope' in the item",
+    }
+
+
+def test_get_workflow(client, site):
+    site.add(
+        "GET",
+        "/news/@workflow",
+        {
+            "state": {"id": "private", "title": "Private"},
+            "history": [{"action": None}],
+            "transitions": [
+                {"@id": f"{SITE_URL}/news/@workflow/publish", "title": "Publish"},
+                {"@id": f"{SITE_URL}/news/@workflow/submit", "title": "Submit"},
+            ],
+        },
+    )
+    server = mcp_server.build_server(client)
+    assert call(server, "get_workflow", path="/news") == {
+        "state": {"id": "private", "title": "Private"},
+        "transitions": [
+            {"id": "publish", "title": "Publish"},
+            {"id": "submit", "title": "Submit"},
+        ],
+    }
+
+
+def test_get_vocabulary(client, site):
+    site.add("GET", "/@vocabularies", [{"@id": "x", "title": "Keywords"}])
+    site.add(
+        "GET",
+        "/@vocabularies/plone.app.vocabularies.Keywords",
+        {"items": [{"token": "a", "title": "A"}], "items_total": 1, "batching": {}},
+    )
+    server = mcp_server.build_server(client)
+    assert call(server, "get_vocabulary") == {
+        "items": [{"@id": "x", "title": "Keywords"}]
+    }
+    found = call(
+        server,
+        "get_vocabulary",
+        vocabulary="plone.app.vocabularies.Keywords",
+        title="a",
+        limit=10,
+    )
+    assert found == {"items": [{"token": "a", "title": "A"}], "items_total": 1}
+    params = site.requests[-1].url.params
+    assert (params["title"], params["b_size"]) == ("a", "10")
+
+
+def test_translation_tools(client, site):
+    site.add("GET", "/en/page/@translations", {"items": [{"language": "de"}]})
+    site.add("POST", "/en/page/@translations", {"@id": f"{SITE_URL}/de/seite"})
+    server = mcp_server.build_server(client)
+    assert call(server, "get_translations", path="/en/page") == {
+        "items": [{"language": "de"}]
+    }
+    assert call(
+        server, "link_translation", path="/en/page", translation="/de/seite"
+    ) == {"@id": f"{SITE_URL}/de/seite"}
+    assert json.loads(site.requests[-1].content) == {"id": "/de/seite"}
+    assert call(server, "unlink_translation", path="/en/page", language="de") == {
+        "unlinked": "de",
+        "dry_run": False,
+    }
+    last = site.requests[-1]
+    assert (last.method, json.loads(last.content)) == ("DELETE", {"language": "de"})
+
+
+def test_working_copy_tools(client, site):
+    site.add("GET", "/page/@workingcopy", {"working_copy": None})
+    site.add("POST", "/page/@workingcopy", {"@id": f"{SITE_URL}/copy_of_page"})
+    server = mcp_server.build_server(client)
+    assert call(server, "get_working_copy", path="/page") == {"working_copy": None}
+    assert call(server, "check_out", path="/page") == {
+        "@id": f"{SITE_URL}/copy_of_page"
+    }
+    assert call(server, "check_in", path="/copy_of_page") == {
+        "checked_in": "/copy_of_page",
+        "dry_run": False,
+    }
+    assert call(server, "cancel_working_copy", path="/copy_of_page") == {
+        "cancelled": "/copy_of_page",
+        "dry_run": False,
+    }
+    assert [(r.method, site.site_path(r)) for r in site.requests[-2:]] == [
+        ("PATCH", "/copy_of_page/@workingcopy"),
+        ("DELETE", "/copy_of_page/@workingcopy"),
+    ]
 
 
 def test_update_transition_delete(client, site):
@@ -560,7 +782,7 @@ def test_serve_warns_on_stderr_and_still_starts(
         def run(self, transport: str) -> None:
             started.append(transport)
 
-    def fake_build(target, rejected=()):
+    def fake_build(target, rejected=(), tools=None):
         built.append(rejected)
         return FakeServer()
 
@@ -581,7 +803,7 @@ def test_serve_is_quiet_without_credentials(client_factory, site, monkeypatch, c
         def run(self, transport: str) -> None:
             pass
 
-    def fake_build(target, rejected=()):
+    def fake_build(target, rejected=(), tools=None):
         built.append(rejected)
         return FakeServer()
 

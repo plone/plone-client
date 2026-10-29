@@ -558,3 +558,185 @@ def test_result_to_dict():
         "changed": [],
         "requests": [],
     }
+
+
+def block_page():
+    return {
+        "@id": f"{SITE_URL}/page",
+        "@type": "Document",
+        "id": "page",
+        "title": "Page",
+        "blocks": {
+            "t": {"@type": "title"},
+            "d": {"@type": "description"},
+            "a": {"@type": "slate", "plaintext": "First"},
+            "g": {
+                "@type": "gridBlock",
+                "blocks": {"g1": {"@type": "teaser", "href": [{"@id": "/x"}]}},
+                "blocks_layout": {"items": ["g1"]},
+            },
+        },
+        "blocks_layout": {"items": ["t", "d", "a", "g"]},
+    }
+
+
+@pytest.fixture
+def page(site):
+    site.add("GET", "/page", block_page())
+    return site
+
+
+def _saved(site):
+    """The blocks the last PATCH sent."""
+    request = site.requests[-1]
+    assert (request.method, site.site_path(request)) == ("PATCH", "/page")
+    return json.loads(request.content)
+
+
+def _order(body):
+    return body["blocks_layout"]["items"]
+
+
+class TestAddBlocks:
+    def test_at_the_end(self, client, page):
+        result = operations.add_blocks(
+            client, "/page", [{"@type": "teaser", "href": "/news"}]
+        )
+        body = _saved(page)
+        (new,) = result.changed[0]["added"]
+        assert _order(body) == ["t", "d", "a", "g", new]
+        assert body["blocks"][new] == {"@type": "teaser", "href": [{"@id": "/news"}]}
+        assert result.item["@id"] == f"{SITE_URL}/page"
+        assert [entry["id"] for entry in result.item["blocks"]] == _order(body)
+
+    def test_after_a_block(self, client, page):
+        result = operations.add_blocks(
+            client, "/page", [{"@type": "slate"}, {"@type": "image"}], after="d"
+        )
+        new = result.changed[0]["added"]
+        assert _order(_saved(page)) == ["t", "d", *new, "a", "g"]
+
+    def test_after_a_block_in_a_container(self, client, page):
+        result = operations.add_blocks(
+            client, "/page", [{"@type": "teaser", "href": "/y"}], after="g1"
+        )
+        body = _saved(page)
+        (new,) = result.changed[0]["added"]
+        assert _order(body) == ["t", "d", "a", "g"]
+        assert body["blocks"]["g"]["blocks_layout"]["items"] == ["g1", new]
+        assert new in body["blocks"]["g"]["blocks"]
+
+    def test_at_a_position(self, client, page):
+        result = operations.add_blocks(
+            client, "/page", [{"@type": "slate"}], position=0
+        )
+        (new,) = result.changed[0]["added"]
+        # The title block stays first
+        assert _order(_saved(page)) == ["t", new, "d", "a", "g"]
+
+    @pytest.mark.parametrize(
+        "kwargs,message",
+        [
+            ({"after": "a", "position": 1}, "either after or position"),
+            ({"after": "nope"}, "No block 'nope'"),
+            ({"position": 5}, "between 0 and 4"),
+        ],
+    )
+    def test_refused_changes_send_nothing(self, client, page, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            operations.add_blocks(client, "/page", [{"@type": "slate"}], **kwargs)
+        assert [r.method for r in page.requests] in ([], ["GET"])
+
+    def test_blocks_need_a_type(self, client, page):
+        with pytest.raises(ValueError, match="needs an @type"):
+            operations.add_blocks(client, "/page", [{"href": "/a"}])
+        with pytest.raises(ValueError, match="No blocks"):
+            operations.add_blocks(client, "/page", [])
+        assert page.requests == []
+
+    def test_item_without_blocks(self, client, site):
+        site.add("GET", "/file", {"@id": f"{SITE_URL}/file"})
+        with pytest.raises(ValueError, match="/file has no blocks"):
+            operations.add_blocks(client, "/file", [{"@type": "slate"}])
+        assert _calls(site) == [("GET", "/file")]
+
+    def test_dry_run(self, client_factory, page):
+        client = client_factory(dry_run=True)
+        result = operations.add_blocks(client, "/page", [{"@type": "slate"}])
+        assert result.dry_run
+        assert _calls(page) == [("GET", "/page")]
+        assert len(result.item["blocks"]) == 5
+
+    def test_layout_is_tidied(self, client, site):
+        item = block_page()
+        item["blocks_layout"] = {"items": ["a", "gone", "t"]}
+        site.add("GET", "/page", item)
+        result = operations.add_blocks(client, "/page", [{"@type": "slate"}])
+        (new,) = result.changed[0]["added"]
+        assert _order(_saved(site)) == ["t", "a", new, "d", "g"]
+
+
+class TestUpdateBlock:
+    def test_merge(self, client, page):
+        result = operations.update_block(client, "/page", "a", {"plaintext": "New"})
+        assert _saved(page)["blocks"]["a"] == {"@type": "slate", "plaintext": "New"}
+        assert result.changed[0]["updated"] == ["a"]
+
+    def test_replace_keeps_the_type(self, client, page):
+        operations.update_block(
+            client, "/page", "g1", {"href": "/z", "overwrite": True}, replace=True
+        )
+        assert _saved(page)["blocks"]["g"]["blocks"]["g1"] == {
+            "@type": "teaser",
+            "href": [{"@id": "/z"}],
+            "overwrite": True,
+        }
+
+    def test_missing_block(self, client, page):
+        with pytest.raises(ValueError, match="No block 'nope'"):
+            operations.update_block(client, "/page", "nope", {"x": 1})
+        assert _calls(page) == [("GET", "/page")]
+
+
+class TestRemoveBlocks:
+    def test_remove(self, client, page):
+        result = operations.remove_blocks(client, "/page", ["a", "g1"])
+        body = _saved(page)
+        assert _order(body) == ["t", "d", "g"]
+        assert "a" not in body["blocks"]
+        assert body["blocks"]["g"]["blocks"] == {}
+        assert body["blocks"]["g"]["blocks_layout"]["items"] == []
+        assert result.changed[0]["removed"] == ["a", "g1"]
+
+    def test_block_missing_from_the_layout(self, client, site):
+        item = block_page()
+        item["blocks_layout"] = {"items": ["t"]}
+        site.add("GET", "/page", item)
+        operations.remove_blocks(client, "/page", "a")
+        assert _order(_saved(site)) == ["t", "d", "g"]
+
+    def test_missing_block_sends_nothing(self, client, page):
+        with pytest.raises(ValueError, match="No block 'nope'"):
+            operations.remove_blocks(client, "/page", ["a", "nope"])
+        assert _calls(page) == [("GET", "/page")]
+
+
+class TestSetBlocks:
+    def test_keeps_title_and_description(self, client, page):
+        result = operations.set_blocks(
+            client, "/page", [{"@type": "slate", "plaintext": "Only"}]
+        )
+        body = _saved(page)
+        (new,) = result.changed[0]["added"]
+        assert _order(body) == ["t", "d", new]
+        assert set(body["blocks"]) == {"t", "d", new}
+        assert result.changed[0]["removed"] == ["a", "g"]
+
+    def test_given_title_replaces_the_old_one(self, client, page):
+        result = operations.set_blocks(
+            client, "/page", [{"@type": "slate"}, {"@type": "title"}]
+        )
+        body = _saved(page)
+        slate, title = result.changed[0]["added"]
+        assert _order(body) == [title, "d", slate]
+        assert result.changed[0]["removed"] == ["t", "a", "g"]

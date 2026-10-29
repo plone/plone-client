@@ -210,14 +210,39 @@ def test_mcp_needs_the_extra(invoke, monkeypatch):
     assert "'mcp' extra" in run.error["message"]
 
 
-def test_mcp_serves_the_client(invoke, monkeypatch):
-    served = []
-    monkeypatch.setattr("plone_client.mcp_server.serve", served.append)
+@pytest.fixture
+def served(monkeypatch):
+    """What ``serve`` was called with: the sites and the tools, per call."""
+    found = []
+
+    def serve(sites, tools=None):
+        found.append((sites, tools))
+
+    monkeypatch.setattr("plone_client.mcp_server.serve", serve)
+    return found
+
+
+def test_mcp_serves_the_client(invoke, served):
     run = invoke("--read-only", "mcp", "-n")
     assert run.exit_code == 0, run.stderr
-    (sites,) = served
+    ((sites, tools),) = served
     client = sites.client()
     assert (client.url, client.read_only, client.dry_run) == (SITE_URL, True, True)
+    assert tools is None
+
+
+def test_mcp_offers_only_some_tools(invoke, served):
+    run = invoke("mcp", "--tool", "search", "--tool", "get_content")
+    assert run.exit_code == 0, run.stderr
+    ((_, tools),) = served
+    assert tools == ["search", "get_content"]
+
+
+def test_mcp_unknown_tool_is_a_configuration_error(invoke, site):
+    run = invoke("--read-only", "mcp", "--tool", "add_blocks")
+    assert run.exit_code == 3
+    assert "does not offer add_blocks" in run.error["message"]
+    assert site.requests == []
 
 
 def _profiles(invoke, *names):
@@ -238,13 +263,6 @@ def _profiles(invoke, *names):
         assert run.exit_code == 0, run.stderr
 
 
-@pytest.fixture
-def served(monkeypatch):
-    found = []
-    monkeypatch.setattr("plone_client.mcp_server.serve", found.append)
-    return found
-
-
 def test_mcp_serves_several_sites(invoke, memory_keyring, served):
     _profiles(invoke, "blog", "docs", "prod")
     invoke("profile", "group-set", "work", "prod", "docs")
@@ -252,7 +270,7 @@ def test_mcp_serves_several_sites(invoke, memory_keyring, served):
         "--dry-run", "mcp", "--site", "blog", "--group", "work", "--site", "docs"
     )
     assert run.exit_code == 0, run.stderr
-    (sites,) = served
+    ((sites, _),) = served
     assert sites.names == ["blog", "docs", "prod"]
     assert [s.read_only for s in sites] == [False, False, True]
     assert sites.dry_run is True
@@ -268,7 +286,7 @@ def test_mcp_serves_every_site(invoke, memory_keyring, served):
     _profiles(invoke, "docs", "blog")
     run = invoke("--read-only", "mcp", "--all")
     assert run.exit_code == 0, run.stderr
-    (sites,) = served
+    ((sites, _),) = served
     assert sites.names == ["blog", "docs"]
     assert not sites.writable
 
