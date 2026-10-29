@@ -302,6 +302,30 @@ class TestCreatePage:
         assert fake_create.body()["@type"] == "Post"
 
     @needs_html2blocks
+    def test_blocks_setting_of_the_site_and_the_call(self, client_factory, site):
+        client = client_factory(
+            blocks={"codeBlock": {"style": "dark"}, "slateTable": False}
+        )
+        site.fallback = httpx.Response(201, json={"@id": f"{SITE_URL}/docs/code"})
+        source = "# Code\n\n```python\nprint(1)\n```\n\n| a |\n|---|\n| 1 |\n"
+        operations.create_page(
+            client, "/docs", source, blocks_setting={"codeBlock": {"style": "light"}}
+        )
+        found = list(site.body()["blocks"].values())
+        types = [block["@type"] for block in found]
+        assert types == ["title", "description", "codeBlock", "slate"]
+        # the call's options replace the site's, and the site's table setting stays
+        assert found[2]["style"] == "light"
+
+    @needs_html2blocks
+    def test_invalid_blocks_setting_sends_nothing(self, client, site):
+        with pytest.raises(ValueError, match="Unknown block type nope"):
+            operations.create_page(
+                client, "/docs", "# Hi\n\nText", blocks_setting={"nope": True}
+            )
+        assert site.requests == []
+
+    @needs_html2blocks
     def test_files_and_lead_image(self, client, fake_create, files):
         site = fake_create
         site.add("GET", "/@types/Document", VOLTO_NEWS)
@@ -465,6 +489,35 @@ class TestUploadTree:
         assert photo["@type"] == "Image"
 
     @needs_html2blocks
+    @needs_html2blocks
+    def test_convert_pages_with_a_blocks_setting(self, client, fake_create, tmp_path):
+        (tmp_path / "code.md").write_text("# Code\n\n```sh\nls\n```\n")
+        operations.upload_tree(
+            client,
+            tmp_path,
+            "/docs",
+            convert_pages=True,
+            blocks_setting={"codeBlock": True},
+        )
+        types = [block["@type"] for block in fake_create.body()["blocks"].values()]
+        assert types == ["title", "description", "codeBlock"]
+
+    @needs_html2blocks
+    def test_invalid_blocks_setting_sends_nothing(self, client, site, tree):
+        with pytest.raises(ValueError, match="cannot be disabled"):
+            operations.upload_tree(
+                client,
+                tree,
+                "/docs",
+                convert_pages=True,
+                blocks_setting={"slate": False},
+            )
+        assert site.requests == []
+
+    def test_blocks_setting_is_ignored_without_pages(self, client, fake_create, tree):
+        operations.upload_tree(client, tree, "/docs", blocks_setting={"nope": True})
+        assert fake_create.requests
+
     def test_convert_pages_without_heading(self, client, fake_create, tmp_path):
         (tmp_path / "notes.md").write_text("Just text.\n")
         operations.upload_tree(client, tmp_path, "/docs", convert_pages=True)

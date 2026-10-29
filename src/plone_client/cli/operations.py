@@ -1,15 +1,18 @@
 """Commands for the high-level operations, which group several requests."""
 
+from .. import blocks
 from .. import operations
 from ..operations import LeadImage
 from . import panels
 from .content import DataOption
 from .content import SetOption
 from .output import emit
+from .output import parse_value
 from .output import payload
 from .state import get_state
 from pathlib import Path
 from typing import Annotated
+from typing import Any
 
 import sys
 import typer
@@ -60,6 +63,27 @@ LeadOption = Annotated[
 NoLeadOption = Annotated[
     bool, typer.Option("--no-lead", help="Do not set a lead image.")
 ]
+BlocksOption = Annotated[
+    str | None,
+    typer.Option(
+        "--blocks",
+        help="Block types to produce, as JSON, such as "
+        '\'{"codeBlock": {"style": "light"}, "slateTable": false}\'; '
+        "merged over the profile's.",
+    ),
+]
+
+
+def parse_blocks(raw: str | None) -> dict[str, Any] | None:
+    """The ``--blocks`` option, parsed.
+
+    :param raw: The JSON text, or ``None``.
+    :returns: The setting, or ``None`` when not given.
+    :raises ValueError: If it is not JSON, or not a valid setting.
+    """
+    if raw is None:
+        return None
+    return blocks.check_setting(parse_value(raw))
 
 
 @commands.command("create-page", rich_help_panel=panels.CONTENT_CHANGE)
@@ -92,11 +116,13 @@ def create_page(
     lead: LeadOption = None,
     no_lead: NoLeadOption = False,
     publish: PublishOption = None,
+    blocks_setting: BlocksOption = None,
 ) -> None:
     """Create a page from Markdown or HTML, converted to blocks.
 
     Files given with --file are uploaded inside the page; the first image is
-    its lead image unless --lead or --no-lead says otherwise. Needs the
+    its lead image unless --lead or --no-lead says otherwise. --blocks, and
+    the profile's blocks setting, choose the block types. Needs the
     'markdown' extra, on Python 3.12 or later.
     """
     client = get_state(ctx).client
@@ -115,6 +141,7 @@ def create_page(
         files=files or (),
         lead_image=_lead_image(lead, no_lead),
         publish=publish,
+        blocks_setting=parse_blocks(blocks_setting),
     )
     emit(ctx, result.to_dict())
 
@@ -188,6 +215,7 @@ def upload_tree(
         bool, typer.Option("--hidden", help="Also upload names starting with a dot.")
     ] = False,
     publish: PublishOption = None,
+    blocks_setting: BlocksOption = None,
 ) -> None:
     """Upload a local folder as pages, files and images, keeping its structure."""
     client = get_state(ctx).client
@@ -199,5 +227,6 @@ def upload_tree(
         convert_pages=convert_pages,
         include_hidden=include_hidden,
         publish=publish,
+        blocks_setting=parse_blocks(blocks_setting),
     )
     emit(ctx, result.to_dict())

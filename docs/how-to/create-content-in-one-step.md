@@ -55,6 +55,40 @@ To give the title yourself, pass `title`, or `--title`.
 To create the page as another type with blocks, pass `portal_type`, or `--type`.
 To upload files inside the page too, pass `files`, or `--file` once per file; the lead image is set as described below.
 
+## Choose the block types
+
+Code in the Markdown becomes `slate` text unless you turn on `codeBlock`, and tables become `slateTable` blocks unless you turn them off.
+Pass the block types to use in `blocks_setting`, or as JSON in `--blocks`.
+
+::::{tab-set}
+:sync-group: interface
+
+:::{tab-item} Python
+:sync: python
+
+```python
+result = operations.create_page(
+    client,
+    "/docs",
+    Path("install.md").read_text(),
+    blocks_setting={"codeBlock": {"style": "dark"}, "slateTable": False},
+)
+```
+:::
+
+:::{tab-item} Command line
+:sync: shell
+
+```shell
+plone-client create-page /docs install.md --blocks '{"codeBlock": {"style": "dark"}, "slateTable": false}'
+```
+:::
+::::
+
+`upload_tree` takes the same setting, for the pages it converts.
+To use a setting for every page of a site, put it in the profile's `blocks` table; a setting passed to one call is merged over it.
+{ref}`reference-configuration-blocks` lists the values.
+
 ## Create an item with its images
 
 Pass the files to upload inside the item.

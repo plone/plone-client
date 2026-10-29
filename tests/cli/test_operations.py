@@ -34,6 +34,39 @@ def test_create_page_from_an_html_file(invoke, site, tmp_path):
     assert site.requests == []
 
 
+@needs_html2blocks
+def test_create_page_blocks_setting(invoke, site, monkeypatch):
+    monkeypatch.setenv("PLONE_CLIENT_BLOCKS", '{"codeBlock": {"style": "dark"}}')
+    site.add("POST", "/docs", {"@id": f"{SITE_URL}/docs/code", "title": "Code"})
+    source = "# Code\n\n```sh\nls\n```\n"
+    run = invoke("create-page", "/docs", "-", stdin=source)
+    assert run.exit_code == 0, run.stderr
+    code = [b for b in site.body()["blocks"].values() if b["@type"] == "codeBlock"]
+    assert code[0]["style"] == "dark"
+    run = invoke(
+        "create-page", "/docs", "-", "--blocks", '{"codeBlock": false}', stdin=source
+    )
+    assert run.exit_code == 0, run.stderr
+    types = {block["@type"] for block in site.body()["blocks"].values()}
+    assert "codeBlock" not in types
+
+
+@needs_html2blocks
+@pytest.mark.parametrize(
+    "setting,message",
+    [
+        ("[1]", "must be a mapping"),
+        ('{"nope": true}', "Unknown block type nope"),
+        ('{"slate": false}', "cannot be disabled"),
+    ],
+)
+def test_create_page_invalid_blocks_setting(invoke, site, setting, message):
+    run = invoke("create-page", "/docs", "-", "--blocks", setting, stdin="# Hi\n")
+    assert run.exit_code == 2
+    assert message in run.error["message"]
+    assert site.requests == []
+
+
 def test_create_page_without_title(invoke, site):
     run = invoke("create-page", "/docs", "-", stdin="Only text")
     assert run.exit_code == 2

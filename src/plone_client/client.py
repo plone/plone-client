@@ -14,6 +14,7 @@ from .auth import AuthMethod
 from .auth import build_auth
 from .auth import JWTAuth
 from .auth import TokenAuth
+from .blocks import check_setting
 from .exceptions import error_from_response
 from .exceptions import PloneConfigurationError
 from .exceptions import PloneConnectionError
@@ -190,7 +191,11 @@ class PloneClient:
     :param frontend_url: URL of the Volto frontend, for services that Volto
         serves itself (``@blocks-schema``); the site URL by default, which is
         right when ``url`` is the frontend.
+    :param blocks: Block types that Markdown and HTML become on this site,
+        for :mod:`plone_client.operations`; see
+        :data:`plone_client.blocks.BlocksSetting`.
     :param transport: Custom :mod:`httpx` transport, mostly for tests.
+    :raises ValueError: If ``url`` is empty, or ``blocks`` has the wrong shape.
     """
 
     def __init__(
@@ -211,12 +216,15 @@ class PloneClient:
         read_only: bool = False,
         dry_run: bool = False,
         frontend_url: str = "",
+        blocks: Mapping[str, Any] | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         if not url:
             raise ValueError("The URL of the site is required")
         self.url = url.rstrip("/")
         self.frontend_url = frontend_url.rstrip("/") or self.url
+        #: Block types that Markdown and HTML become on this site.
+        self.blocks = check_setting(blocks)
         self.api_prefix = api_prefix.strip("/")
         self.retries = retries
         self.backoff = backoff
