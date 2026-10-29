@@ -67,3 +67,50 @@ def test_command_secret_failures(command):
 
 def test_none_secret():
     assert credentials.get_secret(_profile(secret="none")) == ""
+
+
+TOKEN = "t" * 32
+
+
+def test_mcp_token_round_trip(memory_keyring, monkeypatch):
+    monkeypatch.delenv(credentials.MCP_TOKEN_ENV, raising=False)
+    with pytest.raises(PloneConfigurationError, match="mcp-token generate"):
+        credentials.get_mcp_token()
+    credentials.set_mcp_token(TOKEN)
+    assert memory_keyring.store == {("plone-client", "mcp-token"): TOKEN}
+    assert credentials.get_mcp_token() == TOKEN
+    assert credentials.delete_mcp_token() is True
+    assert credentials.delete_mcp_token() is False
+
+
+def test_mcp_token_does_not_clash_with_a_profile_named_mcp(memory_keyring):
+    credentials.set_secret(Profile(name="mcp", url="https://example.org"), "pw")
+    credentials.set_mcp_token(TOKEN)
+    assert len(memory_keyring.store) == 2
+
+
+def test_mcp_token_from_the_environment_wins(memory_keyring, monkeypatch):
+    credentials.set_mcp_token(TOKEN)
+    monkeypatch.setenv(credentials.MCP_TOKEN_ENV, "e" * 40)
+    assert credentials.get_mcp_token() == "e" * 40
+
+
+def test_generated_mcp_token(memory_keyring, monkeypatch):
+    monkeypatch.delenv(credentials.MCP_TOKEN_ENV, raising=False)
+    first = credentials.generate_mcp_token()
+    assert len(first) >= credentials.MCP_TOKEN_MIN_LENGTH
+    assert credentials.get_mcp_token() == first
+    assert credentials.generate_mcp_token() != first
+
+
+def test_short_mcp_tokens_are_refused(memory_keyring, monkeypatch):
+    with pytest.raises(PloneConfigurationError, match="given has 5 characters"):
+        credentials.set_mcp_token("short")
+    assert memory_keyring.store == {}
+    monkeypatch.setenv(credentials.MCP_TOKEN_ENV, "short")
+    with pytest.raises(PloneConfigurationError, match="in \\$PLONE_CLIENT_MCP_TOKEN"):
+        credentials.get_mcp_token()
+    monkeypatch.delenv(credentials.MCP_TOKEN_ENV)
+    memory_keyring.store[("plone-client", "mcp-token")] = "short"
+    with pytest.raises(PloneConfigurationError, match="in the keyring has 5"):
+        credentials.get_mcp_token()

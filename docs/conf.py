@@ -75,6 +75,8 @@ nitpick_ignore_regex = [
     ("py:mod", r"httpx|keyring"),
     # The MCP SDK publishes no Sphinx inventory.
     ("py:class", r"mcp\..*"),
+    # threading.Lock is documented under that name, not as its runtime class.
+    ("py:class", r"_thread\.lock"),
 ]
 
 # -- Link checking ----------------------------------------------------------

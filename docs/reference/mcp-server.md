@@ -34,6 +34,9 @@ Without `--site`, `--group`, or `--all`, the server serves one site, and takes i
 | `--read-only`, or a profile with `read_only = true` | Refuse changes; see {ref}`reference-assistant-server-modes`. |
 | `-n`, `--dry-run` | Tools that change a site return the requests they would send, and send none. |
 | `--tool NAME` | Offer only the tool `NAME`. Repeat it for several; see {ref}`reference-assistant-server-tools`. |
+| `--http` | Serve over streamable HTTP instead of standard input and output; see {ref}`reference-assistant-server-http`. |
+| `--host HOST` | Address to listen on, with `--http`. Default `127.0.0.1`. |
+| `--port PORT` | Port to listen on, with `--http`. Default `8000`. |
 | `-v`, `--verbose` | Log each request to standard error. |
 
 `--site`, `--group`, and `--all` combine, and each profile is served once: every profile for `--all`, then the `--site` profiles, then the profiles of each group.
@@ -69,6 +72,36 @@ plone-client mcp --profile blog --tool search --tool get_content --tool list_blo
 With several sites, `list_sites` is offered too.
 A name the server would not offer, such as a misspelled tool, or a tool that changes the site when it is read-only, stops the command with exit code 3 before it connects to any site; the error lists the tools it offers.
 The server's instructions are the same whatever the tools, so they may mention tools that are not offered.
+
+(reference-assistant-server-http)=
+
+## Over HTTP
+
+<!-- source: src/plone_client/mcp_server.py, src/plone_client/credentials.py, src/plone_client/cli/mcp.py -->
+
+With `--http`, the server speaks streamable HTTP at `http://HOST:PORT/mcp`, for assistants that do not start a local command.
+The tools, the sites, and the modes are the same as over standard input and output.
+
+Every request needs the header `Authorization: Bearer TOKEN`, loopback included; without it, or with another token, the server answers `401`.
+The token is compared in constant time.
+`plone-client mcp --http` reads it from `$PLONE_CLIENT_MCP_TOKEN`, or else from the keyring, and stops with exit code 3 before connecting to any site when there is none, or when it is shorter than 32 characters.
+
+| Command | Does |
+|---|---|
+| `plone-client mcp-token generate` | Makes a random token, stores it in the keyring, and prints it as `token`. A token stored before is replaced. |
+| `plone-client mcp-token set` | Stores a token of your own, from a hidden prompt or, with `--token-stdin`, from standard input. |
+| `plone-client mcp-token delete` | Removes the token from the keyring; prints `deleted`. |
+
+On `127.0.0.1`, `localhost`, and `::1`, the server also refuses requests whose `Host` header names another host (`421`), which protects against DNS rebinding.
+On other addresses, put the server behind a proxy that adds TLS: the token, and the content of the site, would otherwise cross the network in clear text.
+
+The site's own credentials stay in the server's profiles.
+A client of the HTTP server never sees them, and cannot point the server at another site.
+One server answers every client that has the token, with the same profiles: give each person or team their own server and token when they should not share access.
+
+Tools run one at a time per site, so that operations and block edits from several clients do not mix.
+
+The server writes the address it listens on to standard error, and stops on `Ctrl+C` or `SIGTERM`.
 
 ## Tools that read
 

@@ -212,11 +212,11 @@ def test_mcp_needs_the_extra(invoke, monkeypatch):
 
 @pytest.fixture
 def served(monkeypatch):
-    """What ``serve`` was called with: the sites and the tools, per call."""
+    """What ``serve`` was called with: the sites, tools and HTTP settings."""
     found = []
 
-    def serve(sites, tools=None):
-        found.append((sites, tools))
+    def serve(sites, tools=None, http=None):
+        found.append((sites, tools, http))
 
     monkeypatch.setattr("plone_client.mcp_server.serve", serve)
     return found
@@ -225,16 +225,56 @@ def served(monkeypatch):
 def test_mcp_serves_the_client(invoke, served):
     run = invoke("--read-only", "mcp", "-n")
     assert run.exit_code == 0, run.stderr
-    ((sites, tools),) = served
+    ((sites, tools, http),) = served
     client = sites.client()
     assert (client.url, client.read_only, client.dry_run) == (SITE_URL, True, True)
     assert tools is None
+    assert http is None
+
+
+MCP_TOKEN = "t" * 32
+
+
+def test_mcp_over_http(invoke, served, memory_keyring, monkeypatch):
+    monkeypatch.delenv("PLONE_CLIENT_MCP_TOKEN", raising=False)
+    stored = invoke("mcp-token", "set", "--token-stdin", stdin=MCP_TOKEN + "\n")
+    assert stored.json == {"token": "stored", "stored": "keyring"}
+    run = invoke("mcp", "--http", "--host", "192.0.2.10", "--port", "9000")
+    assert run.exit_code == 0, run.stderr
+    ((_, _, http),) = served
+    assert (http.token, http.host, http.port, http.path) == (
+        MCP_TOKEN,
+        "192.0.2.10",
+        9000,
+        "/mcp",
+    )
+
+
+def test_mcp_over_http_needs_a_token(invoke, served, site, memory_keyring, monkeypatch):
+    monkeypatch.delenv("PLONE_CLIENT_MCP_TOKEN", raising=False)
+    run = invoke("mcp", "--http")
+    assert run.exit_code == 3
+    assert "mcp-token generate" in run.error["message"]
+    assert served == []
+    assert site.requests == []
+
+
+def test_mcp_token_commands(invoke, memory_keyring):
+    generated = invoke("mcp-token", "generate")
+    assert generated.exit_code == 0, generated.stderr
+    token = generated.json["token"]
+    assert memory_keyring.store == {("plone-client", "mcp-token"): token}
+    short = invoke("mcp-token", "set", "--token-stdin", stdin="short\n")
+    assert short.exit_code == 3
+    assert memory_keyring.store == {("plone-client", "mcp-token"): token}
+    assert invoke("mcp-token", "delete").json == {"deleted": True}
+    assert invoke("mcp-token", "delete").json == {"deleted": False}
 
 
 def test_mcp_offers_only_some_tools(invoke, served):
     run = invoke("mcp", "--tool", "search", "--tool", "get_content")
     assert run.exit_code == 0, run.stderr
-    ((_, tools),) = served
+    ((_, tools, _),) = served
     assert tools == ["search", "get_content"]
 
 
@@ -270,7 +310,7 @@ def test_mcp_serves_several_sites(invoke, memory_keyring, served):
         "--dry-run", "mcp", "--site", "blog", "--group", "work", "--site", "docs"
     )
     assert run.exit_code == 0, run.stderr
-    ((sites, _),) = served
+    ((sites, _, _),) = served
     assert sites.names == ["blog", "docs", "prod"]
     assert [s.read_only for s in sites] == [False, False, True]
     assert sites.dry_run is True
@@ -286,7 +326,7 @@ def test_mcp_serves_every_site(invoke, memory_keyring, served):
     _profiles(invoke, "docs", "blog")
     run = invoke("--read-only", "mcp", "--all")
     assert run.exit_code == 0, run.stderr
-    ((sites, _),) = served
+    ((sites, _, _),) = served
     assert sites.names == ["blog", "docs"]
     assert not sites.writable
 

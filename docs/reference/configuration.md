@@ -113,6 +113,8 @@ Each key is a group name, and each value is a list of profile names.
 
 The keyring is the operating system's own: macOS Keychain, Windows Credential Locker, or Secret Service on Linux.
 
+The token of the MCP server over HTTP is kept under the service `plone-client`, account `mcp-token`, which no profile uses; see {ref}`reference-assistant-server-http`.
+
 ## Project file
 
 A `.plone-client.toml` file in the working directory, or in one of its parents, selects the profile for everything run below it.
@@ -154,12 +156,13 @@ It then reads the settings from the environment variables below.
 | `PLONE_CLIENT_READ_ONLY` | `true` to refuse every change. |
 | `PLONE_CLIENT_FRONTEND_URL` | URL of the Volto frontend, when `PLONE_CLIENT_URL` is the backend. |
 
-These two are read by the command line only.
+These are read by the command line only.
 
 | Variable | Meaning |
 |---|---|
 | `PLONE_CLIENT_PROFILE` | Profile to use. |
 | `PLONE_CLIENT_CONFIG` | Configuration file. |
+| `PLONE_CLIENT_MCP_TOKEN` | Token of `plone-client mcp --http`, instead of the one in the keyring. |
 
 ## Related
 
