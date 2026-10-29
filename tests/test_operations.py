@@ -489,7 +489,6 @@ class TestUploadTree:
         assert photo["@type"] == "Image"
 
     @needs_html2blocks
-    @needs_html2blocks
     def test_convert_pages_with_a_blocks_setting(self, client, fake_create, tmp_path):
         (tmp_path / "code.md").write_text("# Code\n\n```sh\nls\n```\n")
         operations.upload_tree(
@@ -518,6 +517,7 @@ class TestUploadTree:
         operations.upload_tree(client, tree, "/docs", blocks_setting={"nope": True})
         assert fake_create.requests
 
+    @needs_html2blocks
     def test_convert_pages_without_heading(self, client, fake_create, tmp_path):
         (tmp_path / "notes.md").write_text("Just text.\n")
         operations.upload_tree(client, tmp_path, "/docs", convert_pages=True)
