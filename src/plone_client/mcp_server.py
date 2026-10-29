@@ -423,7 +423,9 @@ def has_html2blocks() -> bool:
 
 
 def build_server(
-    target: PloneClient | Sites, rejected: tuple[str, ...] = ()
+    target: PloneClient | Sites,
+    rejected: tuple[str, ...] = (),
+    tools: Iterable[str] | None = None,
 ) -> MCPServer:
     """An MCP server whose tools work on one site or several.
 
@@ -431,8 +433,15 @@ def build_server(
         ``read_only`` and ``dry_run`` settings apply to its tools.
     :param rejected: Names of the sites whose credentials were rejected, for
         the instructions.
+    :param tools: Names of the only tools to offer, to keep the list the
+        model reads short; all when ``None``. ``list_sites`` is offered with
+        several sites either way.
     :returns: The server, ready to ``run()``.
+    :raises PloneConfigurationError: If a tool in ``tools`` is not one this
+        server offers, such as a tool that changes a read-only site.
     """
+    wanted = None if tools is None else set(tools)
+    known: list[str] = []
     sites = target if isinstance(target, Sites) else Sites.from_client(target)
     title = (
         f"Plone sites {', '.join(sites.names)}"
@@ -450,6 +459,9 @@ def build_server(
 
     def add(annotations: ToolAnnotations) -> Register:
         def decorator(func: Tool) -> Tool:
+            known.append(func.__name__)
+            if wanted is not None and func.__name__ not in wanted:
+                return func
             server.add_tool(
                 tool_errors(_per_site(sites, func)),
                 name=func.__name__,
@@ -478,6 +490,12 @@ def build_server(
     if sites.writable:
         _write_tools(add)
         _operation_tools(add)
+    unknown = sorted((wanted or set()) - set(known))
+    if unknown:
+        raise PloneConfigurationError(
+            f"This server does not offer {', '.join(unknown)} "
+            f"(it offers: {', '.join(sorted(known))})"
+        )
     return server
 
 
@@ -1112,19 +1130,24 @@ def _working_copy_tools(
         return {"cancelled": path, "dry_run": client.dry_run}
 
 
-def serve(target: PloneClient | Sites) -> None:
+def serve(target: PloneClient | Sites, tools: Iterable[str] | None = None) -> None:
     """Serve the tools over standard input and output.
 
     :param target: A client, for one site, or the sites; their clients are
         closed when the server stops.
+    :param tools: Names of the only tools to offer; see :func:`build_server`.
+    :raises PloneConfigurationError: If a tool in ``tools`` is not offered.
     """
     from .cli.profile import rejected_message
 
     sites = target if isinstance(target, Sites) else Sites.from_client(target)
     try:
+        if tools is not None:
+            # Refuse an unknown tool before connecting to the sites
+            build_server(sites, tools=tools)
         rejected = tuple(rejected_sites(sites))
         for name in rejected:
             sys.stderr.write(f"plone-client: warning: {rejected_message(name)}\n")
-        build_server(sites, rejected).run("stdio")
+        build_server(sites, rejected, tools).run("stdio")
     finally:
         sites.close()

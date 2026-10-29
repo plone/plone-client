@@ -72,6 +72,10 @@ def mcp(
         typer.Option(help="Group of profiles to serve (see 'profile groups')."),
     ] = None,
     every: Annotated[bool, typer.Option("--all", help="Serve every profile.")] = False,
+    tool: Annotated[
+        list[str] | None,
+        typer.Option(help="Offer only this tool; repeat it for several."),
+    ] = None,
 ) -> None:
     """Serve sites as an MCP server, over standard input and output.
 
@@ -79,7 +83,8 @@ def mcp(
     other commands use it. With several sites, every tool takes a 'site'
     argument. Secrets stay in the keyring. A read-only profile, or
     --read-only, refuses changes; with --dry-run the tools report the
-    requests instead of sending them. Needs the 'mcp' extra.
+    requests instead of sending them. --tool keeps the list of tools the
+    model reads short. Needs the 'mcp' extra.
     """
     try:
         from ..mcp_server import serve
@@ -91,7 +96,10 @@ def mcp(
     state = get_state(ctx)
     if not (site or group or every):
         profile = state.selected_profile()
-        serve(Sites.from_client(state.client, name=profile.name if profile else "site"))
+        serve(
+            Sites.from_client(state.client, name=profile.name if profile else "site"),
+            tool,
+        )
         return
     profiles = _profiles(state, site or [], group or [], every)
     serve(
@@ -100,5 +108,6 @@ def mcp(
             read_only=state.read_only,
             dry_run=state.dry_run,
             factory=_client,
-        )
+        ),
+        tool,
     )

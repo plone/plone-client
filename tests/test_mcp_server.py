@@ -100,6 +100,30 @@ def test_read_only_server_has_no_write_tools(client_factory):
     assert "This server is read-only." in server.instructions
 
 
+def test_only_some_tools(client):
+    server = mcp_server.build_server(client, tools=["search", "add_blocks"])
+    assert set(tools(server)) == {"search", "add_blocks"}
+
+
+def test_list_sites_is_always_offered(sites):
+    server = mcp_server.build_server(sites(), tools=["search"])
+    assert set(tools(server)) == {"list_sites", "search"}
+
+
+@pytest.mark.parametrize("read_only,name", [(False, "nope"), (True, "add_blocks")])
+def test_tools_the_server_does_not_offer(client_factory, read_only, name):
+    client = client_factory(read_only=read_only)
+    with pytest.raises(PloneConfigurationError, match=f"does not offer {name} "):
+        mcp_server.build_server(client, tools=["search", name])
+
+
+def test_serve_refuses_unknown_tools_before_connecting(client, site, monkeypatch):
+    monkeypatch.setattr(mcp_server.MCPServer, "run", lambda self, transport: None)
+    with pytest.raises(PloneConfigurationError, match="does not offer nope"):
+        mcp_server.serve(client, ["nope"])
+    assert site.requests == []
+
+
 def test_dry_run_is_announced(client_factory):
     server = mcp_server.build_server(client_factory(dry_run=True))
     assert "This server is in a dry run." in server.instructions
@@ -758,7 +782,7 @@ def test_serve_warns_on_stderr_and_still_starts(
         def run(self, transport: str) -> None:
             started.append(transport)
 
-    def fake_build(target, rejected=()):
+    def fake_build(target, rejected=(), tools=None):
         built.append(rejected)
         return FakeServer()
 
@@ -779,7 +803,7 @@ def test_serve_is_quiet_without_credentials(client_factory, site, monkeypatch, c
         def run(self, transport: str) -> None:
             pass
 
-    def fake_build(target, rejected=()):
+    def fake_build(target, rejected=(), tools=None):
         built.append(rejected)
         return FakeServer()
 

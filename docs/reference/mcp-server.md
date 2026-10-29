@@ -33,6 +33,7 @@ Without `--site`, `--group`, or `--all`, the server serves one site, and takes i
 | `--all` | Serve every profile. |
 | `--read-only`, or a profile with `read_only = true` | Refuse changes; see {ref}`reference-assistant-server-modes`. |
 | `-n`, `--dry-run` | Tools that change a site return the requests they would send, and send none. |
+| `--tool NAME` | Offer only the tool `NAME`. Repeat it for several; see {ref}`reference-assistant-server-tools`. |
 | `-v`, `--verbose` | Log each request to standard error. |
 
 `--site`, `--group`, and `--all` combine, and each profile is served once: every profile for `--all`, then the `--site` profiles, then the profiles of each group.
@@ -53,6 +54,21 @@ With more than one site, the server changes as follows.
 - Each site has its own client, created the first time a tool uses that site. A profile whose secret is missing fails only when a tool uses it.
 
 With one site, from `--site` or otherwise, tools have no `site` argument and there is no `list_sites`.
+
+(reference-assistant-server-tools)=
+
+## Choosing the tools
+
+The model reads the description of every tool the server offers, so a long list costs context in every conversation.
+`--tool` offers only the tools named:
+
+```shell
+plone-client mcp --profile blog --tool search --tool get_content --tool list_blocks --tool update_block
+```
+
+With several sites, `list_sites` is offered too.
+A name the server would not offer, such as a misspelled tool, or a tool that changes the site when it is read-only, stops the command with exit code 3 before it connects to any site; the error lists the tools it offers.
+The server's instructions are the same whatever the tools, so they may mention tools that are not offered.
 
 ## Tools that read
 
