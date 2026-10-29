@@ -1,8 +1,10 @@
 from plone_client import blocks
+from plone_client import mcp_server
 from plone_client import operations
 from plone_client import PloneBadRequestError
 from plone_client import PloneNotFoundError
 
+import asyncio
 import pytest
 
 
@@ -87,6 +89,29 @@ def test_users_and_groups(plone):
         assert "integration" in plone.groups.get("Reviewers")["members"]["items"]
     finally:
         plone.users.delete("integration", delete_memberareas=False)
+
+
+def _call(server, name, **arguments):
+    result = asyncio.run(server.call_tool(name, arguments))
+    assert not result.is_error
+    return result.structured_content
+
+
+def test_mcp_workflow_and_vocabulary(plone, folder):
+    server = mcp_server.build_server(plone)
+    found = _call(server, "get_workflow", path=folder)
+    assert found["state"]["id"] == "private"
+    assert "publish" in {entry["id"] for entry in found["transitions"]}
+
+    terms = _call(
+        server,
+        "get_vocabulary",
+        vocabulary="plone.app.vocabularies.ReallyUserFriendlyTypes",
+        limit=5,
+    )
+    assert len(terms["items"]) == 5
+    assert terms["items_total"] > 5
+    assert {"token", "title"} <= set(terms["items"][0])
 
 
 def _stored(plone, path):

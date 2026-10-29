@@ -66,6 +66,10 @@ With one site, from `--site` or otherwise, tools have no `site` argument and the
 | `get_navigation` | `path`, `depth` (1–5, default 2) | The navigation tree. |
 | `content_types` | `portal_type`, `addable_in` | The content types, or the JSON schema of `portal_type`. |
 | `block_types` | `block_id`, `path` | Markdown: the blocks of the site, or the docs, schema, and variations of one block; see {ref}`reference-managers-block-types`. |
+| `get_workflow` | `path` | `state` of an item and the `transitions` it can run now, each with `id` and `title`. |
+| `get_vocabulary` | `vocabulary`, `path`, `title`, `limit` (1–500, default 50) | Without `vocabulary`, the vocabularies of the site; with it, `items` (`token` and `title`) and `items_total`. |
+| `get_translations` | `path` | The translations linked to an item; needs `plone.app.multilingual`. |
+| `get_working_copy` | `path` | The working copy of an item, or the item a working copy belongs to; needs `plone.app.iterate`. |
 | `call_service` | `method`, `path`, `params`, `body` | `status` and `body` of any `plone.restapi` request. |
 
 `call_service` is offered in every mode, and follows the server's read-only and dry run settings like any other request.
@@ -87,6 +91,11 @@ With one site, from `--site` or otherwise, tools have no `site` argument and the
 | `update_block` | `path`, `block_id`, `data`, `replace` | {func}`~plone_client.operations.update_block`. |
 | `remove_blocks` | `path`, `block_ids` | {func}`~plone_client.operations.remove_blocks`. |
 | `set_blocks` | `path`, `items` | {func}`~plone_client.operations.set_blocks`. |
+| `link_translation` | `path`, `translation` | Link an existing item as a translation. |
+| `unlink_translation` | `path`, `language` | Remove the link to the translation in `language`; both items stay. |
+| `check_out` | `path` | Check out an item into a working copy; returns its `@id`. |
+| `check_in` | `path` | Apply a working copy to its item and remove the working copy. |
+| `cancel_working_copy` | `path` | Remove a working copy without applying it. |
 
 The tools that run an operation return its {class}`~plone_client.operations.OperationResult` as JSON.
 Paths are site paths such as `/news/item`; the `@id` URLs that tools return work too.
@@ -122,10 +131,10 @@ They take no lock, so a change someone else saves between the read and the write
 | Annotation | Tools |
 |---|---|
 | `readOnlyHint` | `list_sites`, and the tools that read, except `call_service`. |
-| `destructiveHint: false` | `create_content`, `create_content_with_files`, `create_page`, `upload_tree`, `copy_content`, `add_blocks`. |
+| `destructiveHint: false` | `create_content`, `create_content_with_files`, `create_page`, `upload_tree`, `copy_content`, `add_blocks`, `link_translation`, `check_out`. |
 | `destructiveHint`, `idempotentHint` | `update_content`, `update_block`, `set_blocks`. |
-| `destructiveHint`, `idempotentHint: false` | `run_transition`, `move_content`, `call_service`: running them twice does not give the same result, so a client should not retry them. |
-| `destructiveHint` | `delete_content`, `remove_blocks`. |
+| `destructiveHint`, `idempotentHint: false` | `run_transition`, `move_content`, `check_in`, `call_service`: running them twice does not give the same result, so a client should not retry them. |
+| `destructiveHint` | `delete_content`, `remove_blocks`, `unlink_translation`, `cancel_working_copy`. |
 
 (reference-assistant-server-modes)=
 

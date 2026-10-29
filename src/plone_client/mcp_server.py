@@ -472,6 +472,9 @@ def build_server(
         server.add_tool(list_sites, annotations=READ)
     _read_tools(add(READ), add(ACTION))
     _block_tools(add, sites.writable)
+    _workflow_tools(add)
+    _translation_tools(add, sites.writable)
+    _working_copy_tools(add, sites.writable)
     if sites.writable:
         _write_tools(add)
         _operation_tools(add)
@@ -960,6 +963,153 @@ def _block_tools(add: Callable[[ToolAnnotations], Register], writable: bool) -> 
         blocks include blocks of those types.
         """
         return operations.set_blocks(client, path, items).to_dict()
+
+
+def _workflow_tools(add: Callable[[ToolAnnotations], Register]) -> None:
+    """Register the tools for workflow transitions and vocabularies.
+
+    :param add: Registers a tool with its annotations.
+    """
+
+    @add(READ)
+    def get_workflow(client: PloneClient, path: ItemPath) -> dict[str, Any]:
+        """The workflow state of an item and the transitions it can run now.
+
+        Pass a transition id to run_transition.
+        """
+        found = client.workflow.get(path)
+        return {
+            "state": found.get("state"),
+            "transitions": [
+                {"id": entry["@id"].rsplit("/", 1)[-1], "title": entry.get("title")}
+                for entry in found.get("transitions") or []
+            ],
+        }
+
+    @add(READ)
+    def get_vocabulary(
+        client: PloneClient,
+        vocabulary: Annotated[
+            str | None,
+            Field(
+                description="Vocabulary, such as plone.app.vocabularies.Keywords; "
+                "without it, the vocabularies of the site."
+            ),
+        ] = None,
+        path: Annotated[
+            str, Field(description="Item whose context the vocabulary uses.")
+        ] = "/",
+        title: Annotated[
+            str | None, Field(description="Only terms whose title contains this.")
+        ] = None,
+        limit: Annotated[int, Field(ge=1, le=500)] = 50,
+    ) -> dict[str, Any]:
+        """The valid values of a choice field: the terms of a vocabulary.
+
+        content_types shows which vocabulary a field uses. Store a term's
+        token in the field.
+        """
+        if not vocabulary:
+            return {"items": client.vocabularies.list(path)}
+        found = client.vocabularies.get(vocabulary, ref=path, title=title, b_size=limit)
+        return {
+            "items": found.get("items", []),
+            "items_total": found.get("items_total"),
+        }
+
+
+def _translation_tools(
+    add: Callable[[ToolAnnotations], Register], writable: bool
+) -> None:
+    """Register the tools for translations.
+
+    :param add: Registers a tool with its annotations.
+    :param writable: Whether to register the tools that change the site.
+    """
+
+    @add(READ)
+    def get_translations(client: PloneClient, path: ItemPath) -> dict[str, Any]:
+        """The translations linked to an item, with their language.
+
+        Needs plone.app.multilingual on the site.
+        """
+        return client.translations.get(path)
+
+    if not writable:
+        return
+
+    @add(CREATE)
+    def link_translation(
+        client: PloneClient,
+        path: ItemPath,
+        translation: Annotated[
+            str, Field(description="Path, URL or UID of the existing translation.")
+        ],
+    ) -> dict[str, Any]:
+        """Link an existing item as a translation of another."""
+        return client.translations.link(path, translation)
+
+    @add(DELETE)
+    def unlink_translation(
+        client: PloneClient,
+        path: ItemPath,
+        language: Annotated[str, Field(description="Language code, such as de.")],
+    ) -> dict[str, Any]:
+        """Remove the link to the translation in a language; both items stay."""
+        client.translations.unlink(path, language)
+        return {"unlinked": language, "dry_run": client.dry_run}
+
+
+def _working_copy_tools(
+    add: Callable[[ToolAnnotations], Register], writable: bool
+) -> None:
+    """Register the tools for working copies.
+
+    :param add: Registers a tool with its annotations.
+    :param writable: Whether to register the tools that change the site.
+    """
+
+    @add(READ)
+    def get_working_copy(client: PloneClient, path: ItemPath) -> dict[str, Any]:
+        """The working copy of an item, or the item a working copy belongs to.
+
+        Needs plone.app.iterate on the site.
+        """
+        return client.working_copy.get(path)
+
+    if not writable:
+        return
+
+    @add(CREATE)
+    def check_out(client: PloneClient, path: ItemPath) -> dict[str, Any]:
+        """Check out an item into a working copy, to change a published item
+        without changing what visitors see.
+
+        Change the working copy, then check_in to apply it.
+        """
+        return client.working_copy.create(path)
+
+    @add(ACTION)
+    def check_in(
+        client: PloneClient,
+        path: Annotated[
+            str, Field(description="Path of the working copy, or of its item.")
+        ],
+    ) -> dict[str, Any]:
+        """Apply a working copy to its item, and remove the working copy."""
+        client.working_copy.check_in(path)
+        return {"checked_in": path, "dry_run": client.dry_run}
+
+    @add(DELETE)
+    def cancel_working_copy(
+        client: PloneClient,
+        path: Annotated[
+            str, Field(description="Path of the working copy, or of its item.")
+        ],
+    ) -> dict[str, Any]:
+        """Remove a working copy without applying it."""
+        client.working_copy.delete(path)
+        return {"cancelled": path, "dry_run": client.dry_run}
 
 
 def serve(target: PloneClient | Sites) -> None:
