@@ -621,6 +621,50 @@ def test_create_page_tool_describes_the_type(client):
     assert "lead_image" in schema["properties"]
 
 
+@pytest.mark.skipif(
+    not mcp_server.has_html2blocks(),
+    reason="collective.html2blocks is not installed",
+)
+def test_create_page_tool_blocks_setting(client_factory, site):
+    server = mcp_server.build_server(client_factory(blocks={"codeBlock": True}))
+    site.add("POST", "/docs", {"@id": f"{SITE_URL}/docs/code", "title": "Code"})
+    source = "# Code\n\n```sh\nls\n```\n"
+    call(server, "create_page", parent="/docs", source=source)
+    code = [b for b in site.body()["blocks"].values() if b["@type"] == "codeBlock"]
+    assert code[0]["code"] == "ls"
+    call(
+        server,
+        "create_page",
+        parent="/docs",
+        source=source,
+        blocks={"codeBlock": {"style": "light"}},
+    )
+    code = [b for b in site.body()["blocks"].values() if b["@type"] == "codeBlock"]
+    assert code[0]["style"] == "light"
+    error = tool_error(
+        server, "create_page", parent="/docs", source=source, blocks={"nope": True}
+    )
+    assert "Unknown block type nope" in error["error"]["message"]
+    assert len(site.requests) == 2
+
+
+def test_tools_offer_a_blocks_setting(client):
+    found = tools(mcp_server.build_server(client))
+    assert "blocks" in found["upload_tree"].input_schema["properties"]
+    if "create_page" in found:
+        assert "blocks" in found["create_page"].input_schema["properties"]
+
+
+def test_instructions_state_the_blocks_setting(client_factory):
+    server = mcp_server.build_server(client_factory(blocks={"slateTable": False}))
+    assert '{"slateTable": false}' in server.instructions
+    assert "`blocks` argument extends" in server.instructions
+    assert (
+        "`blocks` argument"
+        not in mcp_server.build_server(client_factory()).instructions
+    )
+
+
 def test_site_info(client, site):
     site.add("GET", "/@actions", {"user": [{"id": "logout"}]})
     site.add("GET", "/@system", {"plone_version": "6.1.3"})
@@ -697,8 +741,15 @@ def test_list_sites(sites):
             "url": SITE_URL,
             "description": "The blog",
             "read_only": False,
+            "blocks": {},
         },
-        {"name": "docs", "url": OTHER_URL, "description": "", "read_only": False},
+        {
+            "name": "docs",
+            "url": OTHER_URL,
+            "description": "",
+            "read_only": False,
+            "blocks": {},
+        },
     ]
 
 

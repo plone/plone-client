@@ -45,6 +45,8 @@ def test_default_config_path_home(monkeypatch, tmp_path):
         ({"retries": 1.5}, "retries must be a whole number"),
         ({"retries": True}, "retries must be a number"),
         ({"backoff": -0.5}, "backoff must be positive"),
+        ({"blocks": ["codeBlock"]}, "blocks setting must be a mapping"),
+        ({"blocks": {"codeBlock": "yes"}}, "codeBlock must be true, false"),
     ],
 )
 def test_profile_validation(kwargs, message):
@@ -100,6 +102,7 @@ def test_profile_anonymous(kwargs, anonymous):
             {"frontend_url": "https://www.example.org/"},
             {"frontend_url": "https://www.example.org"},
         ),
+        ({"blocks": {"codeBlock": True}}, {"blocks": {"codeBlock": True}}),
     ],
 )
 def test_profile_client_settings(monkeypatch, kwargs, expected):
@@ -237,6 +240,19 @@ def test_config_save_and_load(tmp_path):
     assert loaded.to_mapping() == config.to_mapping()
 
 
+def test_config_keeps_the_blocks_setting(tmp_path):
+    path = tmp_path / "config.toml"
+    config = Config(path)
+    setting = {"codeBlock": {"style": "light"}, "slateTable": False}
+    config.add(Profile(name="docs", url="https://example.org", blocks=setting))
+    config.add(Profile(name="blog", url="https://example.org"))
+    config.save()
+    loaded = profiles.load_config(path)
+    assert loaded.get("docs").blocks == setting
+    assert loaded.get("blog").blocks == {}
+    assert "blocks" not in loaded.get("blog").summary()
+
+
 def test_load_missing_and_invalid(tmp_path):
     assert profiles.load_config(tmp_path / "missing.toml").profiles == {}
     broken = tmp_path / "broken.toml"
@@ -319,6 +335,26 @@ def test_settings_from_env_numbers(name):
 def test_settings_from_env_errors():
     with pytest.raises(PloneConfigurationError, match="Set PLONE_CLIENT_URL"):
         profiles.settings_from_env({})
+
+
+def test_settings_from_env_blocks():
+    settings = profiles.settings_from_env({
+        "PLONE_CLIENT_URL": "u",
+        "PLONE_CLIENT_BLOCKS": '{"codeBlock": {"style": "light"}}',
+    })
+    assert settings["blocks"] == {"codeBlock": {"style": "light"}}
+
+
+@pytest.mark.parametrize(
+    "raw,message",
+    [("{codeBlock", "PLONE_CLIENT_BLOCKS: Expecting"), ("[1]", "must be a mapping")],
+)
+def test_settings_from_env_blocks_errors(raw, message):
+    with pytest.raises(PloneConfigurationError, match=message):
+        profiles.settings_from_env({
+            "PLONE_CLIENT_URL": "u",
+            "PLONE_CLIENT_BLOCKS": raw,
+        })
 
 
 def test_config_groups(tmp_path):

@@ -11,6 +11,7 @@ from ..profiles import Profile
 from ..profiles import SECRET_VALUES
 from . import panels
 from .output import emit
+from .output import parse_value
 from .output import PloneGroup
 from .state import get_state
 from typing import Annotated
@@ -203,6 +204,14 @@ def add(
             "used to list the site's blocks."
         ),
     ] = "",
+    blocks_setting: Annotated[
+        str | None,
+        typer.Option(
+            "--blocks",
+            help="Block types that Markdown and HTML become on this site, as "
+            "JSON, such as '{\"codeBlock\": true}'.",
+        ),
+    ] = None,
     description: Annotated[str, typer.Option(help="Free text.")] = "",
     password_stdin: Annotated[
         bool,
@@ -224,6 +233,8 @@ def add(
     settings = _connection_settings(timeout, verify, retries, backoff)
     if read_only:
         settings["read_only"] = True
+    if blocks_setting is not None:
+        settings["blocks"] = parse_value(blocks_setting)
     profile = Profile(
         name=name,
         url=url,

@@ -411,6 +411,7 @@ def page_data(
     title: str | None = None,
     description: str | None = None,
     default_title: str = "",
+    blocks_setting: blocks.BlocksSetting | None = None,
 ) -> dict[str, Any]:
     """Field values of a page made from Markdown or HTML.
 
@@ -424,9 +425,12 @@ def page_data(
     :param description: Description of the page.
     :param default_title: Title when there is neither ``title`` nor a
         leading heading, such as the name of the file.
+    :param blocks_setting: Which block types the content becomes; see
+        :func:`~plone_client.blocks.convert`.
     :returns: ``title``, maybe ``description``, ``blocks`` and
         ``blocks_layout``.
-    :raises ValueError: If there is no title.
+    :raises ValueError: If there is no title, or ``blocks_setting`` is
+        invalid.
     :raises PloneConfigurationError: If ``collective.html2blocks`` is missing.
     """
     if not title:
@@ -442,9 +446,23 @@ def page_data(
             source,
             source_format,
             before=[blocks.title(), blocks.description()],
+            blocks=blocks_setting,
         )
     )
     return data
+
+
+def _blocks_setting(
+    client: "PloneClient", setting: blocks.BlocksSetting | None
+) -> dict[str, Any]:
+    """The setting of a conversion: the site's, with the call's over it.
+
+    :param client: The client, whose ``blocks`` is the site's setting.
+    :param setting: The setting of the call.
+    :returns: The merged setting, validated.
+    :raises ValueError: If it is invalid.
+    """
+    return blocks.validate_setting(blocks.merge_settings(client.blocks, setting))
 
 
 def create_page(
@@ -460,12 +478,15 @@ def create_page(
     files: Iterable[str | Path] = (),
     lead_image: LeadImage = "first",
     publish: str | None = None,
+    blocks_setting: blocks.BlocksSetting | None = None,
 ) -> OperationResult:
     """Create a page from Markdown or HTML, converted to blocks.
 
     See :func:`page_data` for how the page is built. Needs the ``markdown``
     extra (Python 3.12 or later). Files are uploaded inside the page as in
-    :func:`create_with_files`, and the lead image is set the same way.
+    :func:`create_with_files`, and the lead image is set the same way. The
+    block types come from the client's ``blocks``, with ``blocks_setting``
+    merged over it block type by block type.
 
     :param client: The client.
     :param parent: Path or URL of the folder.
@@ -480,10 +501,12 @@ def create_page(
         for the first image (skipped when the type has no lead image), or
         ``None`` for no lead image.
     :param publish: Workflow transition to run at the end.
+    :param blocks_setting: Which block types the content becomes; see
+        :func:`~plone_client.blocks.convert`.
     :returns: The result; ``item`` is the new page.
-    :raises ValueError: If there is no title, a file is missing, or the lead
-        image is not an image or cannot be stored by the type. Nothing is
-        sent then.
+    :raises ValueError: If there is no title, a file is missing, the lead
+        image is not an image or cannot be stored by the type, or the blocks
+        setting is invalid. Nothing is sent then.
     :raises PloneConfigurationError: If ``collective.html2blocks`` is missing.
     :raises PloneOperationError: If a request fails.
     """
@@ -491,7 +514,13 @@ def create_page(
     lead = _pick_lead(paths, lead_image)
     body = {
         **(data or {}),
-        **page_data(source, source_format, title=title, description=description),
+        **page_data(
+            source,
+            source_format,
+            title=title,
+            description=description,
+            blocks_setting=_blocks_setting(client, blocks_setting),
+        ),
     }
     with _operation(client, "create_page") as result:
         parent_path = client.content.resolve(parent)
@@ -519,13 +548,17 @@ def create_page(
 
 
 def _folder_body(
-    directory: Path, convert_pages: bool, include_hidden: bool
+    directory: Path,
+    convert_pages: bool,
+    include_hidden: bool,
+    blocks_setting: Mapping[str, Any],
 ) -> tuple[dict[str, Any], Path | None]:
     """Field values of the page made for a folder.
 
     :param directory: The folder.
     :param convert_pages: Use its index file, if any, as content.
     :param include_hidden: Whether hidden files are uploaded.
+    :param blocks_setting: Which block types the content becomes.
     :returns: The values, and the index file used.
     """
     if convert_pages:
@@ -536,6 +569,7 @@ def _folder_body(
                     index.read_text(),
                     PAGE_FORMATS[index.suffix.lower()],
                     default_title=directory.name,
+                    blocks_setting=blocks_setting,
                 )
                 return {"id": slug(directory.name), **body}, index
     return {
@@ -554,6 +588,7 @@ def upload_tree(
     convert_pages: bool = False,
     include_hidden: bool = False,
     publish: str | None = None,
+    blocks_setting: blocks.BlocksSetting | None = None,
 ) -> OperationResult:
     """Upload the contents of a local folder, keeping its structure.
 
@@ -565,7 +600,8 @@ def upload_tree(
     With ``convert_pages``, Markdown and HTML files become pages (see
     :func:`page_data`), and a folder's ``index.md``, ``README.md`` or
     ``index.html`` becomes the content of the folder's own page. This needs
-    the ``markdown`` extra.
+    the ``markdown`` extra. The block types come from the client's
+    ``blocks``, with ``blocks_setting`` merged over it.
 
     :param client: The client.
     :param source: Local folder.
@@ -576,13 +612,17 @@ def upload_tree(
         with a dot.
     :param publish: Workflow transition to run on each new page, such as
         ``publish``; files and images follow their folder.
+    :param blocks_setting: Which block types pages become; see
+        :func:`~plone_client.blocks.convert`.
     :returns: The result; each created entry names its local ``source``.
-    :raises ValueError: If ``source`` is not a folder. Nothing is sent then.
+    :raises ValueError: If ``source`` is not a folder, or, with
+        ``convert_pages``, the blocks setting is invalid. Nothing is sent then.
     :raises PloneOperationError: If a request fails.
     """
     root = Path(source).expanduser()
     if not root.is_dir():
         raise ValueError(f"Not a folder: {root}")
+    setting = _blocks_setting(client, blocks_setting) if convert_pages else {}
     with _operation(client, "upload_tree") as result:
         parent_path = client.content.resolve(parent)
         client.content.get(parent_path, include_items=False)  # it must exist
@@ -596,6 +636,7 @@ def upload_tree(
             include_hidden=include_hidden,
             publish=publish,
             skip=None,
+            blocks_setting=setting,
         )
     return result
 
@@ -611,6 +652,7 @@ def _upload_folder(
     include_hidden: bool,
     publish: str | None,
     skip: Path | None,
+    blocks_setting: Mapping[str, Any],
 ) -> None:
     """Upload the entries of a local folder into a folder of the site.
 
@@ -623,13 +665,16 @@ def _upload_folder(
     :param include_hidden: Upload hidden entries.
     :param publish: Transition for new pages.
     :param skip: Index file already used for the folder's page.
+    :param blocks_setting: Which block types pages become, validated.
     """
     entries = sorted(directory.iterdir(), key=lambda path: path.name.lower())
     for path in entries:
         if path == skip or (path.name.startswith(".") and not include_hidden):
             continue
         if path.is_dir():
-            body, index = _folder_body(path, convert_pages, include_hidden)
+            body, index = _folder_body(
+                path, convert_pages, include_hidden, blocks_setting
+            )
             answer = client.content.create(parent, folder_type, body)
             entry = _created(
                 client, answer, parent, {"@type": folder_type, **body}, source=str(path)
@@ -648,6 +693,7 @@ def _upload_folder(
                 include_hidden=include_hidden,
                 publish=publish,
                 skip=index,
+                blocks_setting=blocks_setting,
             )
         elif convert_pages and path.suffix.lower() in PAGE_FORMATS:
             body = {
@@ -656,6 +702,7 @@ def _upload_folder(
                     path.read_text(),
                     PAGE_FORMATS[path.suffix.lower()],
                     default_title=path.stem,
+                    blocks_setting=blocks_setting,
                 ),
             }
             answer = client.content.create(parent, "Document", body)

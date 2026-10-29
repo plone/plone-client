@@ -124,6 +124,15 @@ Data = Annotated[
         "blocks may be a list of blocks in order, each with an @type."
     ),
 ]
+BlocksChoice = Annotated[
+    dict[str, bool | dict[str, Any]] | None,
+    Field(
+        description="Block types Markdown and HTML become, by @type: true or "
+        "options to produce one, false to not, such as "
+        '{"codeBlock": {"style": "light"}, "slateTable": false}. Merged over '
+        "the site's setting, which the instructions give."
+    ),
+]
 Blocks = Annotated[
     list[dict[str, Any]],
     Field(
@@ -190,6 +199,7 @@ class Site:
     :param description: What the site is, for the model.
     :param read_only: Whether changes to it are refused.
     :param factory: Builds its client, on first use.
+    :param blocks: Block types that Markdown and HTML become on the site.
     :param lock: Held while a tool works on the site, one tool at a time: the
         client records the requests of an operation in one list, and block
         edits read and write the same item.
@@ -201,6 +211,7 @@ class Site:
     read_only: bool = False
     factory: Callable[[], PloneClient] | None = None
     client: PloneClient | None = None
+    blocks: dict[str, Any] = field(default_factory=dict)
     lock: threading.Lock = field(
         default_factory=threading.Lock, repr=False, compare=False
     )
@@ -208,13 +219,15 @@ class Site:
     def summary(self) -> dict[str, Any]:
         """The site, as ``list_sites`` reports it.
 
-        :returns: ``name``, ``url``, ``description`` and ``read_only``.
+        :returns: ``name``, ``url``, ``description``, ``read_only`` and
+            ``blocks``.
         """
         return {
             "name": self.name,
             "url": self.url,
             "description": self.description,
             "read_only": self.read_only,
+            "blocks": self.blocks,
         }
 
 
@@ -247,7 +260,13 @@ class Sites:
         :param name: Name of the site.
         :returns: The sites.
         """
-        site = Site(name, client.url, read_only=client.read_only, client=client)
+        site = Site(
+            name,
+            client.url,
+            read_only=client.read_only,
+            client=client,
+            blocks=dict(client.blocks),
+        )
         return cls([site], dry_run=client.dry_run)
 
     @classmethod
@@ -286,6 +305,7 @@ class Sites:
                     description=profile.description,
                     read_only=locked,
                     factory=builder(profile, locked),
+                    blocks=dict(profile.blocks),
                 )
             )
         return cls(sites, dry_run=dry_run)
@@ -390,6 +410,13 @@ def _instructions(sites: Sites, rejected: tuple[str, ...] = ()) -> str:
         lines.append("")
     elif not sites.writable:
         lines.append("This server is read-only.\n")
+    for site in sites:
+        if site.blocks:
+            where = f" on `{site.name}`" if sites.multiple else ""
+            lines.append(
+                f"Markdown and HTML{where} become blocks with this setting, which "
+                f"a tool's `blocks` argument extends: {json.dumps(site.blocks)}\n"
+            )
     if sites.dry_run:
         lines.append("This server is in a dry run.\n")
     for name in rejected:
@@ -853,6 +880,7 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
                 ),
             ] = "first",
             publish: Publish = None,
+            blocks: BlocksChoice = None,
         ) -> dict[str, Any]:
             """Create a page from Markdown or HTML, converted to Volto blocks.
 
@@ -874,6 +902,7 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
                 files=files or (),
                 lead_image=lead_image,
                 publish=publish,
+                blocks_setting=blocks,
             )
             return result.to_dict()
 
@@ -889,12 +918,18 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
             Field(description="Turn Markdown and HTML files into pages."),
         ] = False,
         publish: Publish = None,
+        blocks: BlocksChoice = None,
     ) -> dict[str, Any]:
         """Upload a local folder: subfolders become pages, files become File
         and Image items, keeping the structure.
         """
         result = operations.upload_tree(
-            client, local_path, parent, convert_pages=convert_pages, publish=publish
+            client,
+            local_path,
+            parent,
+            convert_pages=convert_pages,
+            publish=publish,
+            blocks_setting=blocks,
         )
         return result.to_dict()
 

@@ -401,16 +401,16 @@ wheels = [
 
 [[package]]
 name = "collective-html2blocks"
-version = "1.0.0a9"
+version = "1.0.0b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "markdown-it-py", version = "4.2.0", source = { registry = "https://pypi.org/simple" } },
     { name = "python-slugify" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/b2/8d9d2a70c6877b36806333a0a3e63df9814e7df3587977b5c506585a4aae/collective_html2blocks-1.0.0a9.tar.gz", hash = "sha256:00cd4184927c606db3a3f332aa6af11cf46ec7a086627df97f5fc32920a6e1f8", size = 8351966, upload-time = "2026-10-27T16:05:48.523Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/98/089b242b1d6e6efa0196c9d05f9f20317e6f4ad8a2b683c4cf45727f25a9/collective_html2blocks-1.0.0b1.tar.gz", hash = "sha256:60f97e199a730edbe73ca0c2e48bb6123c0784ea8cf8a5025d1010313ab25c74", size = 8501880, upload-time = "2026-10-29T00:49:16.157Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/a9/9c36db5a99760a52f6de7d224390b795891649cad32c4dfc853ee7cba057/collective_html2blocks-1.0.0a9-py3-none-any.whl", hash = "sha256:b75f130f8256a156419653c182ca52d8b65ca6f27e9923093aca16e6da1bca5a", size = 42723, upload-time = "2026-10-27T16:05:11.111Z" },
+    { url = "https://files.pythonhosted.org/packages/96/e7/117b84e0919d4199c846a895621c83a30ff861ced8f137d39623d026656f/collective_html2blocks-1.0.0b1-py3-none-any.whl", hash = "sha256:53c68b72607016489f67f85ab9f68298cce5b64aacdf97d62ef9bfde81c7c1f3", size = 55841, upload-time = "2026-10-29T00:49:11.334Z" },
 ]
 
 [[package]]
@@ -1402,7 +1402,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "collective-html2blocks", marker = "python_full_version >= '3.12' and extra == 'markdown'", specifier = ">=1.0.0a9" },
+    { name = "collective-html2blocks", marker = "python_full_version >= '3.12' and extra == 'markdown'", specifier = ">=1.0.0b1" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "keyring", marker = "extra == 'cli'", specifier = ">=25.0.0" },
     { name = "keyring", marker = "extra == 'mcp'", specifier = ">=25.0.0" },

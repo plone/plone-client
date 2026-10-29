@@ -240,6 +240,14 @@ def test_token_without_login(client_factory, site, kwargs, expected):
     assert site.requests == []
 
 
+def test_blocks_setting(client_factory):
+    assert client_factory().blocks == {}
+    client = client_factory(blocks={"codeBlock": {"style": "light"}})
+    assert client.blocks == {"codeBlock": {"style": "light"}}
+    with pytest.raises(ValueError, match="true, false or a mapping"):
+        client_factory(blocks={"codeBlock": "on"})
+
+
 def test_frontend_request(client_factory, site):
     site.add("POST", "/@login", {"token": "jwt-token"})
     client = client_factory(frontend_url="http://www.plone.test/", read_only=True)

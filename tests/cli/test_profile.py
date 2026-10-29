@@ -47,6 +47,16 @@ def test_add_with_frontend_url(invoke, memory_keyring, config_file):
     assert profile.client_settings()["frontend_url"] == "http://localhost:3000"
 
 
+def test_add_with_blocks_setting(invoke, memory_keyring, config_file):
+    run = _add(invoke, "blog", "--blocks", '{"codeBlock": true}')
+    assert run.exit_code == 0, run.stderr
+    profile = load_config(config_file).get("blog")
+    assert profile.blocks == {"codeBlock": True}
+    run = _add(invoke, "bad", "--blocks", '{"codeBlock": "yes"}')
+    assert run.exit_code == 3
+    assert "Setting of block type codeBlock" in run.error["message"]
+
+
 def test_profile_is_used_for_requests(invoke, memory_keyring, site):
     _add(invoke)
     invoke("get", "/")

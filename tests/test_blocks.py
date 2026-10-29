@@ -377,3 +377,88 @@ def test_prepare_without_blocks():
 def test_prepare_refuses_other_blocks():
     with pytest.raises(ValueError, match="list of blocks"):
         blocks.prepare({"blocks": "slate"})
+
+
+def test_check_setting():
+    setting = {"codeBlock": {"style": "light"}, "slateTable": False}
+    checked = blocks.check_setting(setting)
+    assert checked == setting
+    assert checked["codeBlock"] is not setting["codeBlock"]
+    assert blocks.check_setting(None) == {}
+
+
+@pytest.mark.parametrize(
+    "setting,message",
+    [
+        (["codeBlock"], "must be a mapping"),
+        ({"codeBlock": "yes"}, "true, false or a mapping"),
+        ({"codeBlock": 1}, "true, false or a mapping"),
+        ({"": True}, "named by strings"),
+    ],
+)
+def test_check_setting_refuses(setting, message):
+    with pytest.raises(ValueError, match=message):
+        blocks.check_setting(setting)
+
+
+def test_merge_settings_by_block_type():
+    site = {"codeBlock": {"style": "dark"}, "slateTable": False}
+    call = {"codeBlock": {"style": "light"}, "video": False}
+    assert blocks.merge_settings(site, None, call) == {
+        "codeBlock": {"style": "light"},
+        "slateTable": False,
+        "video": False,
+    }
+    assert blocks.merge_settings() == {}
+
+
+def test_validate_setting_without_html2blocks(monkeypatch):
+    monkeypatch.setitem(sys.modules, "collective.html2blocks", None)
+    assert blocks.validate_setting({}) == {}
+    with pytest.raises(PloneConfigurationError, match="'markdown' extra"):
+        blocks.validate_setting({"codeBlock": True})
+
+
+@needs_html2blocks
+@pytest.mark.parametrize(
+    "setting,message",
+    [
+        ({"nope": True}, "Unknown block type nope"),
+        ({"codeBlock": {"colour": "red"}}, "Unknown option colour"),
+        ({"slate": False}, "cannot be disabled"),
+    ],
+)
+def test_validate_setting_refuses(setting, message):
+    with pytest.raises(ValueError, match=message):
+        blocks.validate_setting(setting)
+
+
+CODE_AND_TABLE = "Hi\n\n```python\nprint(1)\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"
+
+
+def _types(page):
+    return [page["blocks"][i]["@type"] for i in page["blocks_layout"]["items"]]
+
+
+@needs_html2blocks
+@pytest.mark.parametrize(
+    "setting,expected",
+    [
+        (None, ["slate", "slate", "slateTable"]),
+        ({"codeBlock": True}, ["slate", "codeBlock", "slateTable"]),
+        ({"slateTable": False}, ["slate", "slate", "slate"]),
+    ],
+)
+def test_convert_with_a_setting(setting, expected):
+    assert _types(blocks.convert(CODE_AND_TABLE, blocks=setting)) == expected
+
+
+@needs_html2blocks
+def test_convert_passes_options():
+    page = blocks.convert(CODE_AND_TABLE, blocks={"codeBlock": {"style": "light"}})
+    (code,) = [b for b in page["blocks"].values() if b["@type"] == "codeBlock"]
+    assert (code["code"], code["language"], code["style"]) == (
+        "print(1)",
+        "python",
+        "light",
+    )

@@ -43,7 +43,7 @@ cli = [
 ]
 # collective.html2blocks needs Python 3.12; on 3.11 the conversion is refused
 markdown = [
-    "collective.html2blocks>=1.0.0a9; python_version >= '3.12'",
+    "collective.html2blocks>=1.0.0b1; python_version >= '3.12'",
 ]
 mcp = [
     "plone-client[cli]",

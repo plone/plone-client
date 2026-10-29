@@ -60,7 +60,7 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 | Command | Does |
 |---|---|
 | `create <parent> <type>` | Create an item inside a folder. |
-| `create-page <parent> <file>` | Create a page from Markdown, or HTML with `--html` or an `.html` file, converted to blocks; `-` reads standard input. `--type` picks the content type, which must have blocks; `--file` uploads files inside the page, with `--lead N` and `--no-lead` as for `create-with-files`. Needs the `markdown` extra. |
+| `create-page <parent> <file>` | Create a page from Markdown, or HTML with `--html` or an `.html` file, converted to blocks; `-` reads standard input. `--type` picks the content type, which must have blocks; `--file` uploads files inside the page, with `--lead N` and `--no-lead` as for `create-with-files`; `--blocks` takes a JSON object choosing the block types, merged over the profile's; see {ref}`reference-configuration-blocks`. Needs the `markdown` extra. |
 | `create-with-files <parent> <type> <file>…` | Create an item, upload files and images inside it, and set its lead image; `--lead N` picks the Nth file, `--no-lead` sets none. |
 | `update <ref>` | Change fields of an item. |
 | `workflow <ref> [transition]` | Show the workflow state and transitions of an item, or run a transition. |
@@ -74,7 +74,7 @@ To get plain help in a terminal too, set `TYPER_USE_RICH=0`.
 | Command | Does |
 |---|---|
 | `upload <parent> <file>…` | Upload files as `File` or `Image` items; `--tus` uploads in chunks. |
-| `upload-tree <folder> <parent>` | Upload the contents of a local folder as pages, files, and images, keeping its structure; `--pages` turns Markdown and HTML files into pages. |
+| `upload-tree <folder> <parent>` | Upload the contents of a local folder as pages, files, and images, keeping its structure; `--pages` turns Markdown and HTML files into pages, with the block types chosen by `--blocks`, as for `create-page`. |
 | `download <ref>` | Download the file or image of an item. |
 
 ### Site users, settings, and types
@@ -105,7 +105,7 @@ When one of them stops part way, the error on standard error also has a `result`
 | Command | Does |
 |---|---|
 | `info` | Show the profile, site, and user the command line connects with, and the Plone version. If the site rejected the profile's credentials, the output has `credentials_rejected: true` and a `message` that names the fix, and the exit code is 4. |
-| `profile list`, `show` / `add`, `use`, `defaults`, `remove` / `set-secret`, `test` | Manage connection profiles; `add` and `defaults` take `--timeout`, `--verify` (`true`, `false`, or a CA bundle path), `--retries`, and `--backoff`. |
+| `profile list`, `show` / `add`, `use`, `defaults`, `remove` / `set-secret`, `test` | Manage connection profiles; `add` and `defaults` take `--timeout`, `--verify` (`true`, `false`, or a CA bundle path), `--retries`, and `--backoff`, and `add` takes `--blocks`, a JSON object; see {ref}`reference-configuration-blocks`. |
 | `profile groups` / `group-set NAME PROFILE...`, `group-remove NAME` | List, create or replace, and remove groups of profiles; see {ref}`reference-configuration-groups`. |
 | `skill show` / `install` | Print the agent skill, or install it in `.claude/skills`; `--user` installs it in `~/.claude/skills`, `--dir` in another skills directory. |
 

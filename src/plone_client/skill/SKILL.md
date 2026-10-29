@@ -78,6 +78,7 @@ plone-client upload-tree ./handbook /docs --pages               # folders as pag
 ```
 
 `create-page` and `upload-tree --pages` need the `markdown` extra; exit code 3 means it is missing.
+`--blocks '{"codeBlock": true}'` chooses the block types the Markdown becomes (code blocks, here), merged over the profile's `blocks` setting; an unknown block type is exit code 2.
 
 ## Content model
 

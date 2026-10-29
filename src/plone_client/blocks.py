@@ -41,6 +41,11 @@ import uuid
 
 SourceFormat = Literal["markdown", "html"]
 
+#: Which block types :func:`convert` produces, keyed by their ``@type``:
+#: ``True`` or a mapping of options enables a block type, ``False``
+#: disables it. Block types left out keep the converter's default.
+BlocksSetting = Mapping[str, bool | Mapping[str, Any]]
+
 
 #: Keys whose string values are links.
 LINK_KEYS = frozenset({"url", "href", "link", "preview_image_link"})
@@ -327,16 +332,109 @@ def prepare(data: Mapping[str, Any]) -> dict[str, Any]:
     return {**data, **tidy(normalized, data.get("blocks_layout"))}
 
 
+def check_setting(setting: Any) -> dict[str, bool | dict[str, Any]]:
+    """The shape of a ``blocks`` setting, checked.
+
+    Block type names and options are checked by :func:`validate_setting`,
+    which needs ``collective.html2blocks``; this only checks the shape, so a
+    profile can be read without it.
+
+    :param setting: The setting, such as ``{"codeBlock": {"style": "light"}}``.
+    :returns: A copy, as plain dicts.
+    :raises ValueError: If it is not a mapping of block types to ``True``,
+        ``False`` or a mapping of options.
+    """
+    if setting is None:
+        return {}
+    if not isinstance(setting, Mapping):
+        raise ValueError(f"The blocks setting must be a mapping, not {setting!r}")
+    checked: dict[str, bool | dict[str, Any]] = {}
+    for name, value in setting.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"Block types are named by strings, not {name!r}")
+        if isinstance(value, bool):
+            checked[name] = value
+        elif isinstance(value, Mapping):
+            checked[name] = dict(value)
+        else:
+            raise ValueError(
+                f"Setting of block type {name} must be true, false or a mapping "
+                f"of options, not {value!r}"
+            )
+    return checked
+
+
+def merge_settings(*settings: BlocksSetting | None) -> dict[str, Any]:
+    """``blocks`` settings merged, block type by block type.
+
+    A later setting replaces what an earlier one says about a block type,
+    options included, and keeps what it says about the others. A site's
+    setting followed by the setting of one call gives the call's choices,
+    with the site's for the rest.
+
+    :param settings: The settings, earliest first; ``None`` is skipped.
+    :returns: The merged setting.
+    :raises ValueError: If a setting has the wrong shape.
+    """
+    merged: dict[str, Any] = {}
+    for setting in settings:
+        merged.update(check_setting(setting))
+    return merged
+
+
+def _converter() -> Any:
+    """Import the converter of ``collective.html2blocks``.
+
+    :returns: The ``converter`` module.
+    :raises PloneConfigurationError: If it is not installed.
+    """
+    try:
+        from collective.html2blocks import converter
+    except ImportError:
+        raise PloneConfigurationError(
+            "Converting Markdown or HTML to blocks needs the 'markdown' extra, "
+            "on Python 3.12 or later: pip install 'plone-client[markdown]'"
+        ) from None
+    return converter
+
+
+def validate_setting(setting: BlocksSetting | None) -> dict[str, Any]:
+    """A ``blocks`` setting, checked against the converter's block types.
+
+    Run it before a task that converts several sources, so that a mistake
+    stops the task before anything is sent.
+
+    :param setting: The setting.
+    :returns: The setting, as plain dicts.
+    :raises ValueError: For an unknown block type or option, a value of the
+        wrong type, or disabling a block type the converter needs.
+    :raises PloneConfigurationError: If ``collective.html2blocks`` is not
+        installed and the setting is not empty.
+    """
+    checked = check_setting(setting)
+    if checked:
+        _converter()
+        from collective.html2blocks import registry
+
+        registry.resolve_blocks(checked)
+    return checked
+
+
 def convert(
     source: str,
     source_format: SourceFormat = "markdown",
     *,
     before: Iterable[Mapping[str, Any]] = (),
+    blocks: BlocksSetting | None = None,
 ) -> dict[str, Any]:
     """Blocks for Markdown or HTML, converted by ``collective.html2blocks``.
 
     Paragraphs, headings, lists and quotes become text (``slate``) blocks;
-    images, videos and tables get blocks of their own.
+    images, videos and tables get blocks of their own. ``blocks`` chooses
+    the block types, for example to turn code fences into the ``codeBlock``
+    of a site that has it::
+
+        blocks.convert(source, blocks={"codeBlock": {"style": "light"}})
 
     Needs the ``markdown`` extra (Python 3.12 or later)::
 
@@ -346,24 +444,22 @@ def convert(
     :param source_format: ``markdown`` or ``html``.
     :param before: Blocks to put before the converted ones, such as
         :func:`title` and :func:`description`.
+    :param blocks: Which block types to produce, and their options; see
+        :data:`BlocksSetting`.
     :returns: ``blocks`` and ``blocks_layout``, as :func:`build` returns them.
     :raises PloneConfigurationError: If ``collective.html2blocks`` is not
         installed.
-    :raises ValueError: If the format is unknown.
+    :raises ValueError: If the format is unknown, or for an invalid
+        ``blocks`` setting.
     """
     if source_format not in ("markdown", "html"):
         raise ValueError(f"Unknown source format: {source_format!r}")
-    try:
-        from collective.html2blocks import converter
-    except ImportError:
-        raise PloneConfigurationError(
-            "Converting Markdown or HTML to blocks needs the 'markdown' extra, "
-            "on Python 3.12 or later: pip install 'plone-client[markdown]'"
-        ) from None
+    converter = _converter()
     result = converter.volto_blocks(
         source,
         default_blocks=[dict(block) for block in before],
         source_format=source_format,
+        blocks=check_setting(blocks) or None,
     )
     return {"blocks": result["blocks"], "blocks_layout": result["blocks_layout"]}
 

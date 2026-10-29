@@ -45,16 +45,20 @@ in the working directory or one of its parents (``profile = "blog"``), and
 the ``current`` profile of the configuration file.
 """
 
+from .blocks import check_setting
 from .exceptions import PloneConfigurationError
+from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Mapping
 from dataclasses import asdict
 from dataclasses import dataclass
+from dataclasses import field
 from dataclasses import fields
 from pathlib import Path
 from typing import Any
 from typing import Literal
 
+import json
 import os
 import re
 import tomllib
@@ -157,6 +161,9 @@ class Profile:
     :param api_prefix: Traversal prefix of the REST API.
     :param frontend_url: URL of the Volto frontend, when ``url`` is the
         backend; used for services that Volto serves (``@blocks-schema``).
+    :param blocks: Block types that Markdown and HTML become on this site,
+        such as ``{"codeBlock": True}``; see
+        :data:`plone_client.blocks.BlocksSetting`.
     :param description: Free text, shown by ``plone-client profile list``.
     """
 
@@ -174,6 +181,7 @@ class Profile:
     backoff: float = 0.5
     api_prefix: str = "++api++"
     frontend_url: str = ""
+    blocks: dict[str, Any] = field(default_factory=dict)
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -195,6 +203,10 @@ class Profile:
                 f"Profile {self.name!r}: secret_command is required"
             )
         self._check_connection()
+        try:
+            self.blocks = check_setting(self.blocks)
+        except ValueError as error:
+            raise PloneConfigurationError(f"Profile {self.name!r}: {error}") from None
         self.url = self.url.rstrip("/")
         self.frontend_url = self.frontend_url.rstrip("/")
 
@@ -284,6 +296,8 @@ class Profile:
         }
         if self.frontend_url:
             settings["frontend_url"] = self.frontend_url
+        if self.blocks:
+            settings["blocks"] = dict(self.blocks)
         secret = self.get_secret()
         if self.auth == "token":
             settings["token"] = secret
@@ -550,10 +564,10 @@ def settings_from_env(
 
     Reads ``URL``, ``USERNAME`` (or ``USER``), ``PASSWORD``, ``TOKEN``,
     ``AUTH_METHOD``, ``API_PREFIX``, ``TIMEOUT``, ``VERIFY`` (``true``,
-    ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF``, ``READ_ONLY``
-    and ``FRONTEND_URL``, each after the prefix. With ``prefix="REMOTE_"``, this
-    reads the ``REMOTE_URL``, ``REMOTE_USER`` and ``REMOTE_PASSWORD``
-    variables used by older scripts.
+    ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF``, ``READ_ONLY``,
+    ``FRONTEND_URL`` and ``BLOCKS`` (a JSON object), each after the prefix.
+    With ``prefix="REMOTE_"``, this reads the ``REMOTE_URL``, ``REMOTE_USER``
+    and ``REMOTE_PASSWORD`` variables used by older scripts.
 
     :param environ: The environment.
     :param prefix: Prefix of the variable names.
@@ -578,6 +592,25 @@ def settings_from_env(
         settings["auth_method"] = value("AUTH_METHOD")
     if f"{prefix}API_PREFIX" in environ:
         settings["api_prefix"] = value("API_PREFIX")
+    settings.update(_env_numbers(value, prefix))
+    if value("VERIFY"):
+        settings["verify"] = parse_verify(value("VERIFY"))
+    if value("READ_ONLY"):
+        settings["read_only"] = _bool(value("READ_ONLY"))
+    if value("BLOCKS"):
+        settings["blocks"] = _env_blocks(value("BLOCKS"), f"{prefix}BLOCKS")
+    return settings
+
+
+def _env_numbers(value: Callable[[str], str], prefix: str) -> dict[str, Any]:
+    """``timeout``, ``retries`` and ``backoff`` read from the environment.
+
+    :param value: Reads a variable, by its name after the prefix.
+    :param prefix: Prefix of the variable names, for the message.
+    :returns: The settings that are set.
+    :raises PloneConfigurationError: If one is not a number.
+    """
+    settings: dict[str, Any] = {}
     for name, kind in (("TIMEOUT", float), ("RETRIES", int), ("BACKOFF", float)):
         if value(name):
             try:
@@ -586,8 +619,18 @@ def settings_from_env(
                 raise PloneConfigurationError(
                     f"{prefix}{name} must be a number"
                 ) from None
-    if value("VERIFY"):
-        settings["verify"] = parse_verify(value("VERIFY"))
-    if value("READ_ONLY"):
-        settings["read_only"] = _bool(value("READ_ONLY"))
     return settings
+
+
+def _env_blocks(raw: str, name: str) -> dict[str, Any]:
+    """A ``blocks`` setting read from an environment variable.
+
+    :param raw: The JSON object.
+    :param name: The variable, for the message.
+    :returns: The setting.
+    :raises PloneConfigurationError: If it is not JSON, or not a setting.
+    """
+    try:
+        return check_setting(json.loads(raw))
+    except ValueError as error:  # JSONDecodeError is a ValueError
+        raise PloneConfigurationError(f"{name}: {error}") from None

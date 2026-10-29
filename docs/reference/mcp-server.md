@@ -52,7 +52,7 @@ Without the `mcp` extra, the command exits with code 3.
 With more than one site, the server changes as follows.
 
 - Every tool has a required `site` argument, listed first, whose values are the profile names.
-- The `list_sites` tool returns `items`, each with `name`, `url`, `description`, and `read_only`.
+- The `list_sites` tool returns `items`, each with `name`, `url`, `description`, `read_only`, and `blocks`.
 - The server's instructions list the sites with their URL, description, and whether they are read-only.
 - Each site has its own client, created the first time a tool uses that site. A profile whose secret is missing fails only when a tool uses it.
 
@@ -132,8 +132,8 @@ The server writes the address it listens on to standard error, and stops on `Ctr
 | `run_transition` | `path`, `transition`, `comment`, `include_children` | Run a workflow transition. |
 | `delete_content` | `paths` | Delete items. |
 | `create_content_with_files` | `parent`, `portal_type`, `files`, `data`, `lead_image`, `publish` | {func}`~plone_client.operations.create_with_files`; `files` are local paths. |
-| `create_page` | `parent`, `source`, `source_format`, `portal_type`, `title`, `description`, `data`, `files`, `lead_image`, `publish` | {func}`~plone_client.operations.create_page`. `portal_type` defaults to `Document` and must have blocks; `content_types` lists the types addable in a folder. Offered only when `collective.html2blocks` is installed. |
-| `upload_tree` | `local_path`, `parent`, `convert_pages`, `publish` | {func}`~plone_client.operations.upload_tree`. |
+| `create_page` | `parent`, `source`, `source_format`, `portal_type`, `title`, `description`, `data`, `files`, `lead_image`, `publish`, `blocks` | {func}`~plone_client.operations.create_page`. `portal_type` defaults to `Document` and must have blocks; `content_types` lists the types addable in a folder. Offered only when `collective.html2blocks` is installed. |
+| `upload_tree` | `local_path`, `parent`, `convert_pages`, `publish`, `blocks` | {func}`~plone_client.operations.upload_tree`. |
 | `copy_content` | `sources`, `target` | {func}`~plone_client.operations.copy_items`. |
 | `move_content` | `sources`, `target` | {func}`~plone_client.operations.move_items`. |
 | `add_blocks` | `path`, `items`, `after`, `position` | {func}`~plone_client.operations.add_blocks`. |
@@ -145,6 +145,9 @@ The server writes the address it listens on to standard error, and stops on `Ctr
 | `check_out` | `path` | Check out an item into a working copy; returns its `@id`. |
 | `check_in` | `path` | Apply a working copy to its item and remove the working copy. |
 | `cancel_working_copy` | `path` | Remove a working copy without applying it. |
+
+The `blocks` argument of `create_page` and `upload_tree` chooses the block types that Markdown and HTML become, merged over the `blocks` setting of the site's profile; see {ref}`reference-configuration-blocks`.
+When a site has such a setting, the server's instructions state it.
 
 The tools that run an operation return its {class}`~plone_client.operations.OperationResult` as JSON.
 Paths are site paths such as `/news/item`; the `@id` URLs that tools return work too.

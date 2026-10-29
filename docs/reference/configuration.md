@@ -72,9 +72,40 @@ The file never holds a secret.
 | `backoff` | number | `0.5` | Base delay in seconds between retries; it doubles after each one. |
 | `api_prefix` | string | `++api++` | Traversal prefix of the REST API. |
 | `frontend_url` | string | `""` | URL of the Volto frontend, for the services Volto serves itself, such as `@blocks-schema`. Empty means `url`, which is right when `url` is the frontend. |
+| `blocks` | table | `{}` | Block types that Markdown and HTML become; see below. |
 | `description` | string | `""` | Free text, shown by `plone-client profile list` and by the MCP server's `list_sites` tool. |
 
 Profile names start with a letter or a digit and contain only letters, digits, `_`, `.`, and `-`.
+
+(reference-configuration-blocks)=
+
+## Block types of converted pages
+
+The `blocks` table chooses the block types that `create-page` and `upload-tree --pages` turn Markdown and HTML into, through `collective.html2blocks`.
+Each key is a Volto block type.
+
+| Value | Effect |
+|---|---|
+| `true` | Use the block type, with its default options. |
+| `false` | Do not use it; its content becomes another block, usually `slate`. |
+| A table | Use the block type with these options. |
+
+```toml
+[profiles.docs]
+url = "https://docs.example.org"
+username = "editor"
+
+[profiles.docs.blocks]
+codeBlock = { style = "dark", showLineNumbers = true }
+slateTable = false
+```
+
+Without a setting, code becomes `slate` text, and tables, images, videos, maps, and other embeds become their own blocks: `slateTable`, `image`, `video`, `soundcloudBlock`, `maps`, and `iframe`.
+`codeBlock` is off until turned on.
+`slate` cannot be turned off.
+
+A setting passed to one call, `--blocks` on the command line, the `blocks` argument of an MCP tool, or `blocks_setting` in Python, is merged over the profile's: for each block type it names, its value replaces the profile's.
+An unknown block type or option is refused before any request is sent, with exit code 2 on the command line.
 
 ## Defaults
 
@@ -155,6 +186,7 @@ It then reads the settings from the environment variables below.
 | `PLONE_CLIENT_BACKOFF` | Base delay in seconds between retries. |
 | `PLONE_CLIENT_READ_ONLY` | `true` to refuse every change. |
 | `PLONE_CLIENT_FRONTEND_URL` | URL of the Volto frontend, when `PLONE_CLIENT_URL` is the backend. |
+| `PLONE_CLIENT_BLOCKS` | The `blocks` setting as a JSON object, such as `{"codeBlock": true}`; see {ref}`reference-configuration-blocks`. |
 
 These are read by the command line only.
 
