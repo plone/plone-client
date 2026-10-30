@@ -9,6 +9,18 @@
 
 <!-- towncrier release notes start -->
 
+## 1.0.0a3 (2026-10-30)
+
+
+### New features:
+
+- Added MCP resources to the MCP server: the site root, content items, content types and their schemas, and the blocks of the site, at `plone://<site>/...` URIs. `--tool` limits them too. @ericof [#24](https://github.com/plone/plone-client/issues/24)
+
+
+### Bug fixes:
+
+- Fixed `client.block_types` and the `block_types` tool failing with a `401` once the token expired: the client now logs in again and repeats the request. The documentation now names Volto 19.6.0 as the first release with `@blocks-schema`, and the integration tests run against a real Volto server. @ericof [#23](https://github.com/plone/plone-client/issues/23)
+
 ## 1.0.0a2 (2026-10-28)
 
 
