@@ -269,6 +269,61 @@ def test_frontend_request_defaults_to_the_site_url(client_factory, site):
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize("auth_method", ["basic", "jwt"])
+def test_token_renew(client_factory, site, auth_method):
+    tokens = iter(range(10))
+    site.add_callable(
+        "POST",
+        "/@login",
+        lambda request: httpx.Response(200, json={"token": f"t{next(tokens)}"}),
+    )
+    client = client_factory(auth_method=auth_method)
+    first = client.token()
+    assert client.token(renew=True) != first
+
+
+def test_token_renew_keeps_a_given_token(client_factory, site):
+    client = client_factory(username="", password="", token="given")
+    assert client.token(renew=True) == "given"
+    assert site.requests == []
+
+
+@pytest.mark.parametrize("auth_method", ["basic", "jwt"])
+def test_frontend_request_renews_a_refused_token(client_factory, site, auth_method):
+    tokens = iter(range(10))
+    site.add_callable(
+        "POST",
+        "/@login",
+        lambda request: httpx.Response(200, json={"token": f"t{next(tokens)}"}),
+    )
+    site.add("GET", "/Plone/@blocks-schema", status=401)
+    site.add("GET", "/Plone/@blocks-schema", {})
+    client = client_factory(auth_method=auth_method)
+    response = client.frontend_request("GET", "/@blocks-schema")
+    assert response.status_code == 200
+    first, second = [
+        r.headers["Authorization"] for r in site.requests if r.method == "GET"
+    ]
+    assert first != second
+
+
+def test_frontend_request_does_not_repeat_with_a_given_token(client_factory, site):
+    site.add("GET", "/Plone/@blocks-schema", status=401)
+    client = client_factory(username="", password="", token="given")
+    with pytest.raises(PloneAuthenticationError):
+        client.frontend_request("GET", "/@blocks-schema")
+    assert [r.method for r in site.requests] == ["GET"]
+
+
+def test_frontend_request_gives_up_after_one_renewal(client_factory, site):
+    site.add("POST", "/@login", {"token": "old"})
+    site.add("POST", "/@login", {"token": "new"})
+    site.add("GET", "/Plone/@blocks-schema", status=401)
+    with pytest.raises(PloneAuthenticationError):
+        client_factory().frontend_request("GET", "/@blocks-schema")
+    assert [r.method for r in site.requests] == ["POST", "GET", "POST", "GET"]
+
+
 def test_frontend_request_refuses_changes(client):
     with pytest.raises(ValueError, match="not allowed"):
         client.frontend_request("POST", "/@blocks-schema")

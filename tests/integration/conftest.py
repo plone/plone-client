@@ -35,6 +35,26 @@ def plone_url(docker_ip, docker_services) -> str:
     return url
 
 
+def _volto_is_ready(url: str) -> bool:
+    try:
+        response = httpx.get(f"{url}/@blocks-schema", timeout=5)
+    except httpx.HTTPError:
+        return False
+    # The service exists, and asks for a token
+    return response.status_code == 401
+
+
+@pytest.fixture(scope="session")
+def volto_url(docker_ip, docker_services, plone_url) -> str:
+    """URL of the Volto server, once its ``@blocks-schema`` service answers."""
+    port = docker_services.port_for("volto", 3000)
+    url = f"http://{docker_ip}:{port}"
+    docker_services.wait_until_responsive(
+        timeout=180.0, pause=2.0, check=lambda: _volto_is_ready(url)
+    )
+    return url
+
+
 @pytest.fixture(params=["basic", "jwt"])
 def plone(request, plone_url) -> Generator[PloneClient]:
     """A client of the Plone site, with each authentication method."""

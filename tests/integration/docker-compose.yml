@@ -8,3 +8,11 @@ services:
       TYPE: volto
     ports:
       - "8080"
+  volto:
+    image: ${VOLTO_IMAGE:-plone/plone-frontend:19.6.1}
+    environment:
+      RAZZLE_INTERNAL_API_PATH: http://plone:8080/Plone
+    ports:
+      - "3000"
+    depends_on:
+      - plone

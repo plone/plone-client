@@ -60,9 +60,9 @@ A URL outside the site raises {class}`ValueError`.
 
 ## Block types
 
-`client.block_types` asks the `@blocks-schema` service of the Volto server, which lists the blocks a site offers with their documentation, data schema, and variations.
+`client.block_types` asks the `@blocks-schema` service of Volto 19.6.0 and later, which lists the blocks a site offers with their documentation, data schema, and variations.
 Volto serves it, not `plone.restapi`, so the request goes to the client's `frontend_url`, without `++api++`, and with a Bearer token.
-A client that uses basic authentication gets the token from `@login` once.
+A client that uses basic authentication gets the token from `@login`, and logs in again when the service refuses an expired token.
 
 When the site cannot answer, the manager describes Volto's core blocks instead, from documentation that ships with plone-client.
 Its answer then has `"source": "builtin"`, a `warning` that says why, and no `schema`.
@@ -74,7 +74,7 @@ Its answer then has `"source": "builtin"`, a `warning` that says why, and no `sc
 | `frontend_url` answers `404`, as the backend does | Builtin. |
 | `frontend_url` cannot be reached | Builtin. |
 | The client is anonymous, and the service answers `401` | Builtin. |
-| The service refuses the token with `401` | {class}`~plone_client.exceptions.PloneAuthenticationError` |
+| The service refuses the token with `401`, and logging in again does not help | {class}`~plone_client.exceptions.PloneAuthenticationError` |
 | The service answers `404` for one block, but lists blocks | {class}`~plone_client.exceptions.PloneNotFoundError` |
 | A builtin answer for a block that is not a core block | {class}`~plone_client.exceptions.PloneNotFoundError` |
 
