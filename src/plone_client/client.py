@@ -395,7 +395,7 @@ class PloneClient:
     # Authentication
     # ------------------------------------------------------------------
 
-    def token(self) -> str:
+    def token(self, *, renew: bool = False) -> str:
         """A JWT for the client's user, for services that only take tokens.
 
         Volto's own services, such as ``@blocks-schema``, read a Bearer
@@ -403,12 +403,18 @@ class PloneClient:
         returned as is; otherwise the client logs in with ``@login`` once
         and keeps the token.
 
+        :param renew: Drop the token the client keeps and log in again, for
+            a token that expired. A token given to the client stays as it is.
         :returns: The token, or an empty string for an anonymous client.
         :raises PloneAuthenticationError: If the site refuses the credentials.
         """
         auth = self._http.auth
         if isinstance(auth, TokenAuth):
             return auth.token
+        if renew:
+            self._token = ""
+            if isinstance(auth, JWTAuth):
+                auth.token = ""
         if isinstance(auth, JWTAuth) and auth.token:
             return auth.token
         if not self._token and self.username and self._password:
@@ -528,7 +534,8 @@ class PloneClient:
 
         For the services that Volto serves itself rather than
         ``plone.restapi``, such as ``@blocks-schema``. The request goes to
-        ``frontend_url``, without ``++api++``.
+        ``frontend_url``, without ``++api++``. When the frontend refuses the
+        token, the client logs in again and repeats the request once.
 
         :param method: ``GET`` or ``HEAD``.
         :param ref: Site path with the service, or a URL of the frontend.
@@ -545,9 +552,17 @@ class PloneClient:
             ref = ref[len(self.frontend_url) :]
         path = self.path(ref)
         url = self.frontend_url if path == "/" else f"{self.frontend_url}{path}"
+
+        def send(token: str) -> httpx.Response:
+            request = self._http.build_request(method, url, headers=headers)
+            return self._send(request, auth=TokenAuth(token) if token else httpx.Auth())
+
         token = self.token()
-        request = self._http.build_request(method, url, headers=headers)
-        response = self._send(request, auth=TokenAuth(token) if token else httpx.Auth())
+        response = send(token)
+        if response.status_code == 401 and token:
+            renewed = self.token(renew=True)
+            if renewed != token:
+                response = send(renewed)
         if raise_for_status and response.status_code >= 400:
             raise error_from_response(response)
         return response

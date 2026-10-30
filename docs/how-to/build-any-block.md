@@ -22,7 +22,7 @@ print(client.block_types.markdown("gridBlock"))
 ```
 
 The `plone-client block-types gridBlock --markdown` command prints the same text.
-If the site's Volto has no `@blocks-schema` service yet, you get the documentation of Volto's core blocks instead; see {ref}`reference-managers-block-types`.
+If the site's Volto is older than 19.6.0, it has no `@blocks-schema` service, and you get the documentation of Volto's core blocks instead; see {ref}`reference-managers-block-types`.
 
 ## Build a block by its type
 

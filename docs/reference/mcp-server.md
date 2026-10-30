@@ -70,6 +70,27 @@ plone-client mcp --profile blog --tool search --tool get_content --tool list_blo
 ```
 
 With several sites, `list_sites` is offered too.
+
+(reference-assistant-server-resources)=
+
+## Resources
+
+Each site also has read-only resources: data that you, or the application you use, can attach to a conversation.
+The model calls tools by itself, while how resources are used depends on the application, so they add to the tools and do not replace them.
+
+| URI | Media type | Tool that decides whether it is offered | Returns |
+|---|---|---|---|
+| `plone://<site>/site` | `application/json` | `get_content` | The root of the site. |
+| `plone://<site>/content/<path>` | `application/json` | `get_content` | The full JSON of an item, by its path in the site. |
+| `plone://<site>/types` | `application/json` | `content_types` | The content types. |
+| `plone://<site>/types/<portal_type>` | `application/json` | `content_types` | The JSON schema of a content type. |
+| `plone://<site>/blocks` | `text/markdown` | `block_types` | The blocks of the site; see {ref}`reference-managers-block-types`. |
+| `plone://<site>/blocks/<block_id>` | `text/markdown` | `block_types` | The docs, schema, and variations of a block. |
+
+`<site>` is the name of the profile, percent-encoded, and `site` for a server that was built from a client rather than from profiles.
+With `--tool`, a resource is offered only when the tool in the table is, so resources do not widen the access that you chose.
+A path with `..` in it is refused, and so is a resource of a site that the server does not have.
+Resources wait for the same per-site turn as tools.
 A name the server would not offer, such as a misspelled tool, or a tool that changes the site when it is read-only, stops the command with exit code 3 before it connects to any site; the error lists the tools it offers.
 The server's instructions are the same whatever the tools, so they may mention tools that are not offered.
 

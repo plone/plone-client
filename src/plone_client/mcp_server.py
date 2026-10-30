@@ -18,7 +18,8 @@ reads, the high-level operations of :mod:`plone_client.operations`, and one
 tool for any other service. With several sites, every tool takes a ``site``
 argument, and ``list_sites`` describes them. Tools that change a site are
 only offered when at least one site accepts changes; a change to a read-only
-site is refused before it is sent.
+site is refused before it is sent. Each site also has read-only resources,
+such as ``plone://blog/blocks``, for users to attach to a conversation.
 """
 
 from . import __version__
@@ -28,6 +29,7 @@ from .client import PloneClient
 from .exceptions import error_payload
 from .exceptions import PloneClientError
 from .exceptions import PloneConfigurationError
+from .exceptions import PloneNotFoundError
 from .profiles import Profile
 from collections.abc import Callable
 from collections.abc import Iterable
@@ -37,6 +39,8 @@ from dataclasses import field
 from functools import wraps
 from importlib.util import find_spec
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ResourceError
+from mcp.server.mcpserver.exceptions import ResourceNotFoundError
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
@@ -48,6 +52,7 @@ from starlette.types import Send
 from typing import Annotated
 from typing import Any
 from typing import Literal
+from urllib.parse import quote
 
 import hmac
 import inspect
@@ -162,6 +167,29 @@ def tool_errors(func: Tool) -> Tool:
         except (ValueError, OSError) as error:
             details = {"type": error.__class__.__name__, "message": str(error)}
             raise ToolError(json.dumps({"error": details})) from error
+
+    return wrapper
+
+
+def resource_errors(func: Tool) -> Tool:
+    """Report the errors of a resource to the client.
+
+    Unexpected exceptions reach the client only as a generic error, so a
+    missing item becomes the "resource not found" of the protocol, and the
+    errors a caller can act on keep their message.
+
+    :param func: The resource function.
+    :returns: The wrapped function.
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except PloneNotFoundError as error:
+            raise ResourceNotFoundError(str(error)) from error
+        except (PloneClientError, ValueError, OSError) as error:
+            raise ResourceError(str(error)) from error
 
     return wrapper
 
@@ -492,6 +520,7 @@ def build_server(
     :param tools: Names of the only tools to offer, to keep the list the
         model reads short; all when ``None``. ``list_sites`` is offered with
         several sites either way.
+        A resource is offered only when the tool that reads the same data is.
     :returns: The server, ready to ``run()``.
     :raises PloneConfigurationError: If a tool in ``tools`` is not one this
         server offers, such as a tool that changes a read-only site.
@@ -552,7 +581,101 @@ def build_server(
             f"This server does not offer {', '.join(unknown)} "
             f"(it offers: {', '.join(sorted(known))})"
         )
+    for site in sites:
+        _site_resources(_resource_register(server, sites, site, wanted))
     return server
+
+
+def _resource_register(
+    server: MCPServer, sites: Sites, site: Site, wanted: set[str] | None
+) -> Callable[..., Register]:
+    """A decorator factory that adds resources of one site to the server.
+
+    Every site has its own URIs, ``plone://<site>/...``, so a client can tell
+    them apart, and a site the server does not know is not found.
+
+    :param server: The server.
+    :param sites: The sites of the server.
+    :param site: The site.
+    :param wanted: Names of the only tools to offer, or ``None``.
+    :returns: The factory.
+    """
+    root = f"plone://{quote(site.name, safe='')}"
+
+    def resource(
+        tool: str, path: str, title: str, mime_type: str = "application/json"
+    ) -> Register:
+        """Register a function of a client as a resource, if ``tool`` is offered.
+
+        :param tool: The tool that reads the same data.
+        :param path: Path of the URI, a template when it has variables.
+        :param title: Title of the resource.
+        :param mime_type: Media type of the result.
+        :returns: The decorator.
+        """
+
+        def decorator(func: Tool) -> Tool:
+            if wanted is not None and tool not in wanted:
+                return func
+            signature = inspect.signature(func)
+            parameters = list(signature.parameters.values())[1:]
+
+            @wraps(func)
+            def wrapper(**kwargs: Any) -> Any:
+                with site.lock:
+                    return func(sites.client(site.name), **kwargs)
+
+            wrapper.__signature__ = signature.replace(  # type: ignore[attr-defined]
+                parameters=parameters
+            )
+            server.resource(
+                f"{root}{path}",
+                name=f"{site.name}-{func.__name__}",
+                title=f"{site.name}: {title}",
+                mime_type=mime_type,
+            )(resource_errors(wrapper))
+            return func
+
+        return decorator
+
+    return resource
+
+
+def _site_resources(resource: Callable[..., Register]) -> None:
+    """Add the resources of one site.
+
+    :param resource: See :func:`_resource_register`.
+    """
+
+    @resource("get_content", "/site", "Site root")
+    def site_root(client: PloneClient) -> dict[str, Any]:
+        """The root of the site, as the API serializes it."""
+        return client.content.get("/")
+
+    @resource("get_content", "/content/{+path}", "Content item")
+    def content_item(client: PloneClient, path: str) -> dict[str, Any]:
+        """The full JSON of a content item, by its path in the site."""
+        return client.content.get(f"/{path}")
+
+    @resource("content_types", "/types", "Content types")
+    def type_list(client: PloneClient) -> list[dict[str, Any]]:
+        """The content types of the site."""
+        return client.types.list()
+
+    @resource("content_types", "/types/{portal_type}", "Content type schema")
+    def type_schema(client: PloneClient, portal_type: str) -> dict[str, Any]:
+        """The JSON schema of a content type."""
+        return client.types.get(portal_type)
+
+    @resource("block_types", "/blocks", "Blocks", "text/markdown")
+    def block_list(client: PloneClient) -> str:
+        """The blocks the site offers, with a summary of each."""
+        return client.block_types.markdown()
+
+    @resource("block_types", "/blocks/{block_id}", "Block", "text/markdown")
+    def block_docs(client: PloneClient, block_id: str) -> str:
+        """The documentation, data schema and variations of a block."""
+        return client.block_types.markdown(block_id)
 
 
 def _read_tools(read: Register, action: Register) -> None:
