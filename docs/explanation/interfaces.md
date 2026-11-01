@@ -37,7 +37,7 @@ On a Volto site, the News Item has no `image` field: its lead image is an Image 
 A field the type does not have is silently ignored, so a model that guesses wrong gets an item without an image and no error.
 A tool that creates the item, uploads the files, and sets the right field gets it right every time, because the knowledge lives in code rather than in the prompt.
 
-So the server offers seventeen tools: the everyday reads, the operations of {mod}`plone_client.operations`, and one generic tool for any other service.
+So the server offers a short list, which {ref}`reference-assistant-server-tool-list` shows: the everyday reads, the operations of {mod}`plone_client.operations`, and one generic tool for any other service.
 The operations are ordinary library functions, so scripts and the command line get the same reliability.
 
 ## Why every operation reports its requests
@@ -49,6 +49,21 @@ A person can clean up from that list, and a model can decide to resume.
 
 The same list makes a dry run useful: it shows the whole plan, including the items that would be created and the paths they would most likely get.
 
+## What the model sees
+
+The model never holds a password.
+The profile stays with the server or the command line, and the model works with names: a site, a path, a tool.
+
+What it does read is larger than people expect.
+With the server, it reads the instructions, the description and arguments of every tool on offer, the name, URL, and description of each site, and whatever the tools return.
+With the skill, it reads the skill, the help of the commands, and their output.
+That includes the text of pages, which other people wrote, so what a site says can steer a model the way a prompt does.
+
+This is why the limits live outside the model.
+A read-only profile refuses a change in the client, whatever the model was told, and a short tool list removes the choice.
+A rule in the skill is advice that a careful model follows; a refused request is a fact.
+{ref}`howto-protect` turns this into steps.
+
 ## One server for several sites
 
 Someone who looks after several sites could register one server per site.
@@ -59,7 +74,7 @@ The assistant learns the sites from `list_sites` and from the server's instructi
 Each site keeps its own profile, so a production site can stay read-only while a local site accepts changes, on the same server.
 
 The cost is a new way to go wrong: a tool call with the wrong `site`.
-Read-only profiles make that harmless for production, since the server refuses the change before any request is sent.
+Read-only profiles make that harmless for production, since the server refuses the change before it is sent.
 Where even reads should stay apart, such as sites of different customers, separate servers, or one per group of profiles, keep them apart.
 
 ## Learning the blocks of a site
@@ -74,3 +89,4 @@ An assistant then still writes correct text, image, and teaser blocks, and knows
 - {ref}`explanation-cli-for-agents` explains what makes the command line safe and efficient for agents.
 - {ref}`howto-assistant` connects an assistant through the MCP server.
 - {ref}`howto-agents` sets up a coding agent with the command line and the skill.
+- {ref}`howto-protect` decides what an assistant can see and do.

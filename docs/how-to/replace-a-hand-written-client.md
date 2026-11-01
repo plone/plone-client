@@ -49,7 +49,7 @@ site = PloneClient.from_env(prefix="REMOTE_", dry_run=not args.apply)
 
 ## Move the password into the keyring
 
-On a workstation, create a profile and point the project at it, as {ref}`howto-profiles` shows.
+On a workstation, create a {term}`profile` and point the project at it, as {ref}`howto-profiles` shows.
 Then read the profile instead of the `.env` file.
 
 ```python

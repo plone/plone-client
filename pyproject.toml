@@ -197,7 +197,8 @@ preview = true
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501", "RUF001", "S101", "S105", "S106", "S107"]
-"docs/_examples/*" = ["E402", "S101", "S106"]
+"docs/_checks/**" = ["C901", "E402", "E501", "S", "T201"]
+"docs/_generate/**" = ["C901", "E402", "E501", "S", "T201"]
 "docs/conf.py" = ["E402"]
 # "secret" names where a secret is kept (keyring, env…), never a secret itself
 "src/plone_client/profiles.py" = ["S105", "S107"]

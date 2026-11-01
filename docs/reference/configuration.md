@@ -81,6 +81,9 @@ Profile names start with a letter or a digit and contain only letters, digits, `
 
 ## Block types of converted pages
 
+```{versionadded} 1.0.0a2
+```
+
 The `blocks` table chooses the block types that `create-page` and `upload-tree --pages` turn Markdown and HTML into, through `collective.html2blocks`.
 Each key is a Volto block type.
 

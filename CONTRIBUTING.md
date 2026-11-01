@@ -23,6 +23,12 @@ make test-coverage      # unit tests with a coverage report
 make test-integration   # integration tests against plone/plone-backend in Docker
 make docs               # build the documentation; warnings are errors
 make docs-vale          # check the documentation's style with Vale
+make docs-linkcheck     # check that the links resolve
+make docs-generate      # regenerate the tables of commands, tools and resources
+make docs-generate-check  # fail when a generated table is out of date
+make docs-check         # run the pages against a fresh site in Docker
+make docs-services      # regenerate the service examples from a fresh site
+make docs-services-check  # fail when a service example no longer matches a site
 make docs-livehtml      # rebuild the documentation as you edit it
 ```
 
@@ -42,13 +48,22 @@ PLONE_IMAGE=plone/plone-backend:6.0 make test-integration
 2. Accept item references through `self._resolve()` or `self._service()`, so paths, URLs and UIDs all work.
 3. Add a case to the table in the matching `tests/managers/` module, checking the method, path, query and body sent.
 4. If people will want it on the command line, add a command in `src/plone_client/cli/` and a test in `tests/cli/`.
-5. Add it to the table in `docs/reference/managers.md`, and to `docs/reference/compatibility.md` if it needs a newer `plone.restapi` than Plone 6.0.0 ships.
+5. Add it to the table in `docs/reference/managers.md`, to `docs/reference/compatibility.md` if it needs a newer `plone.restapi` than Plone 6.0.0 ships, and an example to `docs/_generate/services/`.
 
 ## Write documentation
 
 The documentation follows the [Plone documentation style guide](https://6.docs.plone.org/contributing/documentation/index.html) and the [Diátaxis](https://diataxis.fr/) framework: tutorials, how-to guides, reference, and explanation each have their own folder in `docs/`.
 Write one sentence per line.
-Example scripts live in `docs/_examples/`, are included in the pages with `literalinclude`, and are checked by `make lint`.
+
+To add a page, give it the frontmatter of its neighbors, add it to the toctree and the card grid of its section's `index.md`, and link each Plone term to `docs/glossary.md` with `{term}` on its first use.
+
+A change that users can see updates the reference, one how-to guide, and the tutorial that covers it, if there is one.
+
+Commands and transcripts are never typed by hand.
+A page runs between `<!-- check: start -->` and `<!-- check: stop -->` comments: its `shell` and `python` blocks run in order against a fresh site, and the `json`, `text` or `console` block after each is compared with what it printed.
+The docstring of `docs/_checks/run.py` lists every mark, and `make docs-check PAGE=how-to/troubleshoot.md UPDATE=1` writes the output into a page.
+`docs/_checks/seed.py` is the only source of sample content.
+Tables of commands, tools and resources come from the code, through `docs/_generate/`, into `docs/_generated/`, so run `make docs-generate` after changing them.
 
 Docstrings use reStructuredText field lists: `:param:`, `:returns:` and `:raises:`.
 

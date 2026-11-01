@@ -10,7 +10,7 @@ myst:
 
 # Publish a news item with a lead image
 
-This guide shows you how to create a news item with blocks and a lead image, and publish it.
+This guide shows you how to create a news item with {term}`blocks <block>` and a {term}`lead image`, and publish it.
 
 ```{tip}
 {func}`~plone_client.operations.create_with_files` does all of this in one call, and picks the lead image field from the schema; see {ref}`howto-operations`.
@@ -19,7 +19,7 @@ This guide shows the steps it takes.
 
 ## Build the blocks
 
-{mod}`plone_client.blocks` builds the `blocks` and `blocks_layout` fields of a Volto page.
+{mod}`plone_client.blocks` builds the `blocks` and `blocks_layout` fields of a {term}`Volto` page.
 
 ```python
 from plone_client import blocks
@@ -39,7 +39,7 @@ item = client.content.create("/news", "News Item", data)
 ## Attach the lead image
 
 Sites differ in where a news item keeps its lead image.
-`plone.restapi` ignores fields that a content type does not have, so a wrong guess creates the item without an image and reports no error.
+`plone.restapi` ignores fields that a {term}`content type` does not have, so a wrong guess creates the item without an image and reports no error.
 Read the content type's schema to know which field to set.
 
 ```python
@@ -54,7 +54,7 @@ from plone_client import file_data
 data["image"] = file_data("lead.jpg")
 ```
 
-If it has `preview_image_link` instead, as Plone 6.1 sites created for Volto do, upload the image inside the item and link to it by UID.
+If it has `preview_image_link` instead, as Plone 6.1 sites created for Volto do, upload the image inside the item and link to it by {term}`UID`.
 
 ```python
 lead = client.files.upload(item["@id"], "lead.jpg")
@@ -79,11 +79,11 @@ python publish_news.py news.txt /news --image lead.jpg
 python publish_news.py news.txt /news --image lead.jpg --apply
 ```
 
-```{literalinclude} ../_examples/publish_news.py
+```{literalinclude} ../_checks/examples/publish_news.py
 :language: python
 ```
 
 ## Related
 
 - {ref}`howto-upload` uploads other files.
-- {ref}`reference-python-api` documents {mod}`plone_client.blocks`.
+- {ref}`reference-blocks` documents {mod}`plone_client.blocks`.

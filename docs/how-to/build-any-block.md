@@ -10,7 +10,7 @@ myst:
 
 # Build any block
 
-This guide shows you how to build Volto blocks that {mod}`plone_client.blocks` has no helper for, such as the blocks of an add-on, and blocks that hold other blocks, such as a grid.
+This guide shows you how to build {term}`Volto` {term}`blocks <block>` that {mod}`plone_client.blocks` has no helper for, such as the blocks of an add-on, and blocks that hold other blocks, such as a grid.
 
 ## Learn the data a block takes
 

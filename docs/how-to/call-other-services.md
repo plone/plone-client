@@ -10,7 +10,7 @@ myst:
 
 # Call other services
 
-This guide shows you how to call a service that plone-client has no manager or command for, such as one an add-on registers.
+This guide shows you how to call a service that plone-client has no {term}`manager` or command for, such as one an add-on registers.
 These calls still get the client's authentication, retries, errors, and safety switches.
 
 ## From Python

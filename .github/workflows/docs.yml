@@ -31,6 +31,9 @@ jobs:
           python-version: ${{ inputs.python-version }}
           enable-cache: true
 
+      - name: Check the generated tables
+        run: make docs-generate-check
+
       - name: Build HTML documentation
         run: make docs
 
@@ -41,6 +44,12 @@ jobs:
       - name: Check with Vale
         if: ${{ inputs.check-vale }}
         run: make docs-vale DOCS_VALEOPTS="--minAlertLevel=error"
+
+      - name: Run the pages against a Plone site
+        run: make docs-check
+
+      - name: Check the service examples against a Plone site
+        run: make docs-services-check
 
       - name: Upload static files as artifact
         uses: actions/upload-pages-artifact@v5
