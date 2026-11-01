@@ -180,3 +180,50 @@ def test_children(client, site):
 def test_exists(client, site):
     site.add("GET", "/news", {})
     assert client.content.exists("/news") is True
+
+
+@pytest.fixture
+def types_at_root(site):
+    entries = [
+        {"@id": f"{SITE_URL}/@types/Folder", "addable": False},
+        {"@id": f"{SITE_URL}/@types/Document", "addable": True},
+    ]
+    site.add("GET", "/@types", entries)
+
+
+@pytest.mark.usefixtures("types_at_root")
+def test_dry_run_warns_about_a_refused_type(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.create("/", "Folder", title="News")
+    assert answer["dry_run"] is True
+    assert answer["warning"] == (
+        "The site would refuse this: Folder cannot be added in /. It can add: Document."
+    )
+
+
+@pytest.mark.usefixtures("types_at_root")
+def test_dry_run_does_not_warn_about_an_addable_type(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.create("/", "Document", title="News")
+    assert "warning" not in answer
+
+
+def test_dry_run_warns_when_nothing_can_be_added(client_factory, site):
+    site.add("GET", "/news/@types", [])
+    client = client_factory(dry_run=True)
+    answer = client.content.create("/news", "Document", title="News")
+    assert answer["warning"].endswith("It can add: nothing.")
+
+
+def test_dry_run_does_not_warn_when_the_site_cannot_say(client_factory, site):
+    site.add("GET", "/planned/@types", {"message": "Not found"}, status=404)
+    client = client_factory(dry_run=True)
+    answer = client.content.create("/planned", "Document", title="News")
+    assert answer["dry_run"] is True
+    assert "warning" not in answer
+
+
+def test_real_create_does_not_ask_for_types(client, site):
+    site.add("POST", "/", {"@id": f"{SITE_URL}/news"}, status=201)
+    client.content.create("/", "Document", title="News")
+    assert [request.method for request in site.requests] == ["POST"]

@@ -590,6 +590,8 @@ def main() -> int:
     if not running:
         compose("down", "-v", "--timeout", "2")
         compose("up", "--wait")
+        # up --wait does not wait for a service that exits
+        compose("wait", "seed")
     try:
         with tempfile.TemporaryDirectory(prefix="check-") as directory:
             workdir = Path(directory).resolve()

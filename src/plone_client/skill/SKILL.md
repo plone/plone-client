@@ -16,7 +16,7 @@ Results are JSON on standard output; errors are JSON on standard error with a me
 - Before changing a site other than a local one, run the command with `-n` (dry run) and show the user the requests it would send.
 - Never pass `--yes` to `delete`, `users delete`, or `groups delete` unless the user confirmed the exact items.
 - Exit code 7 means the profile is read-only. Do not work around it; tell the user.
-- A dry run shows the request, not the site's answer, so a request that passes `-n` can still be refused.
+- A dry run shows the request, not the site's answer: apart from a `warning` on a refused type, a request that passes `-n` can still fail.
 - Use `-f` to keep only the keys you need, so the output stays small.
 - Read the `@id` of what a command creates: the site may change the id you asked for (`/blocks` became `/blocks-1`).
 - After a change that matters, read the item back: a success does not prove that every field was stored.
@@ -85,7 +85,7 @@ plone-client upload-tree ./handbook /docs --pages               # folders as pag
 ## Content model
 
 - Run `plone-client types <type>` before setting fields: the site silently ignores fields a type does not have.
-- On Volto sites `Folder` usually cannot be added, and a dry run does not show that.
+- On Volto sites `Folder` usually cannot be added; `-n` adds a `warning` to an item the site would refuse.
   For a section such as `/news`, create a `Document`, which is folderish; `plone-client types --addable-in <path>` lists what a folder can hold.
 - A News Item's lead image on a Volto site is `preview_image_link`, a relation to an Image inside the item; other sites have an `image` field.
   `create-with-files` picks the right one from the type's schema.

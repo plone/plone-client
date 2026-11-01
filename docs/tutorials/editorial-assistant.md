@@ -236,8 +236,11 @@ python ask.py "mcp --group editorial --dry-run" create_content_with_files '{"sit
   "requests": [
     "GET http://localhost:8080/Plone/++api++/@types/News%20Item",
     "POST http://localhost:8080/Plone/++api++/news",
+    "GET http://localhost:8080/Plone/++api++/news/@types",
     "POST http://localhost:8080/Plone/++api++/news/conference-announced",
+    "GET http://localhost:8080/Plone/++api++/news/conference-announced/@types",
     "POST http://localhost:8080/Plone/++api++/news/conference-announced",
+    "GET http://localhost:8080/Plone/++api++/news/conference-announced/@types",
     "PATCH http://localhost:8080/Plone/++api++/news/conference-announced"
   ]
 }
@@ -275,7 +278,7 @@ python ask.py "mcp --group editorial" create_content_with_files '{"site": "blog"
   "item": {
     "@id": "http://localhost:8080/Plone/news/conference-announced",
     "@type": "News Item",
-    "UID": "2acdcf90ad814581a3c52f8dca47a6c3",
+    "UID": "a6490fd303ee42bcae004b2558d9a23f",
     "id": "conference-announced",
     "title": "Conference announced",
     "review_state": "private"
@@ -324,7 +327,7 @@ plone-client -p blog get /news/conference-announced -f review_state,preview_imag
   "preview_image_link": {
     "@id": "http://localhost:8080/Plone/news/conference-announced/lead.png",
     "@type": "Image",
-    "UID": "ad9367a1f8154fc7a51ce2152684b5de",
+    "UID": "2b55b9e8f3c24f99bfca2107f6e366ac",
     "description": "",
     "effective": "1969-12-31T00:00:00+00:00",
     "end": null,
@@ -336,17 +339,17 @@ plone-client -p blog get /news/conference-announced -f review_state,preview_imag
       "image": [
         {
           "content-type": "image/png",
-          "download": "@@images/image-64-9978de452d2660c85bf3dea71596ef7b.png",
+          "download": "@@images/image-64-fded1ec5b75f3c439d9d92899c22571c.png",
           "filename": "lead.png",
           "height": 64,
           "scales": {
             "icon": {
-              "download": "@@images/image-32-4a31d23b204b92bcfc20fb7498875837.png",
+              "download": "@@images/image-32-9a5017baf58da7ab7ef884f77b941157.png",
               "height": 32,
               "width": 32
             },
             "tile": {
-              "download": "@@images/image-64-9978de452d2660c85bf3dea71596ef7b.png",
+              "download": "@@images/image-64-fded1ec5b75f3c439d9d92899c22571c.png",
               "height": 64,
               "width": 64
             }

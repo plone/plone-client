@@ -84,8 +84,8 @@ Content model, mostly for sites with the Volto frontend:
   `remove_blocks` change only those blocks.
 - Folder usually cannot be added, even though `content_types` lists it. For a
   section such as /news, create a Document (Page): it is folderish, and so is
-  News Item. A dry run does not show that a type is refused, so check with
-  `content_types` and `addable_in` first.
+  News Item. `content_types` with `addable_in` lists what a folder can hold,
+  and a dry run adds a `warning` to an item the site would refuse.
 - A News Item has no `image` field: its lead image is `preview_image_link`, a
   relation to an Image stored inside it. Use `create_content_with_files`.
 - Fields a type does not have are silently ignored. Check the schema with

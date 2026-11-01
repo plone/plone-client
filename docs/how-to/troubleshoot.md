@@ -210,7 +210,19 @@ plone-client --url http://localhost:8080/Plone -u admin create / Document --titl
 }
 ```
 
-A {term}`dry run` does not show this refusal, because the site never sees the request.
+A {term}`dry run` warns about this, in `warning`, and exits with code 0.
+
+```shell
+plone-client --url http://localhost:8080/Plone -u admin -n create / Folder --title Archive -f dry_run,warning
+```
+
+```json
+{
+  "dry_run": true,
+  "warning": "The site would refuse this: Folder cannot be added in /. It can add: Event, File, Image, Link, News Item, Document."
+}
+```
+
 To check first, list what a folder can hold.
 
 ```shell

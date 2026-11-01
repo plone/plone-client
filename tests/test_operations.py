@@ -175,6 +175,8 @@ class TestCreateWithFiles:
 
     def test_dry_run(self, client_factory, site, files):
         site.add("GET", "/@types/News Item", VOLTO_NEWS)
+        addable = {"@id": f"{SITE_URL}/@types/News Item", "addable": True}
+        site.add("GET", "/news/@types", [addable])
         client = client_factory(dry_run=True)
         result = operations.create_with_files(
             client,
@@ -184,7 +186,7 @@ class TestCreateWithFiles:
             title="Our Office",
             publish="publish",
         )
-        assert [r.method for r in site.requests] == ["GET"]
+        assert {r.method for r in site.requests} == {"GET"}
         assert result.dry_run is True
         planned = f"{SITE_URL}/news/our-office"
         assert result.item == {
@@ -198,13 +200,8 @@ class TestCreateWithFiles:
         patch = client.dry_run_log[2]
         assert patch["url"] == f"{SITE_URL}/++api++/news/our-office"
         assert patch["json"] == {"preview_image_link": f"{planned}/lead.png"}
-        assert [entry.get("dry_run", False) for entry in result.requests] == [
-            False,
-            True,
-            True,
-            True,
-            True,
-        ]
+        writes = [entry for entry in result.requests if entry["method"] != "GET"]
+        assert [entry.get("dry_run") for entry in writes] == [True] * 4
 
     def test_failure_part_way(self, client, fake_create, files):
         site = fake_create
@@ -532,7 +529,7 @@ class TestUploadTree:
     def test_dry_run(self, client_factory, site, tree):
         client = client_factory(dry_run=True)
         result = operations.upload_tree(client, tree, "/docs")
-        assert [r.method for r in site.requests] == ["GET"]
+        assert {r.method for r in site.requests} == {"GET"}
         assert [entry["@id"] for entry in result.created] == [
             f"{SITE_URL}/docs/about.md",
             f"{SITE_URL}/docs/guides",

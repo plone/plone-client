@@ -344,6 +344,8 @@ def main() -> int:
     for page in selected:
         compose("down", "-v", "--timeout", "2")
         compose("up", "--wait")
+        # up --wait does not wait for a service that exits
+        compose("wait", "seed")
         try:
             commands, outputs, failures = check_page(page, options.update, options.demo)
         finally:

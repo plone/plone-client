@@ -38,8 +38,8 @@ export PLONE_CLIENT_PASSWORD=admin
 
 With both, read-only wins: `-n` on a read-only {term}`profile` is refused with exit code 7, so a read-only site cannot preview a change.
 
-A dry run shows the request, not the site's answer to it.
-A request that the site would refuse, such as a type it cannot add, looks fine in a dry run and fails in the real run.
+A dry run shows the request, not the site's answer to it, so a request that looks fine can still fail in the real run.
+The exception is a new item: if the site cannot add its type in that folder, the dry run says so in `warning`, and still exits with code 0.
 
 The same change, with each switch:
 

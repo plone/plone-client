@@ -178,9 +178,9 @@ uv run python migrate.py
 ```
 
 ```text
-copy autumn 2 items, 5 requests
-copy spring 2 items, 5 requests
-copy summer 2 items, 5 requests
+copy autumn 2 items, 7 requests
+copy spring 2 items, 7 requests
+copy summer 2 items, 7 requests
 ```
 
 Each item takes one `GET` of its type and four changes: the item, the image, the lead image, and the transition.
