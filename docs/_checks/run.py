@@ -292,10 +292,11 @@ def write_updates(path: Path, updates: list[tuple[Block, str]]) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
-def compose(*arguments: str) -> None:
+def compose(*arguments: str) -> str:
     """Run ``docker compose`` on the site of the checks.
 
     :param arguments: Its arguments.
+    :returns: What it printed.
     """
     env = {
         **os.environ,
@@ -304,9 +305,25 @@ def compose(*arguments: str) -> None:
         "VOLTO_PORT": VOLTO_PORT,
     }
     command = ["docker", "compose", "-p", PROJECT, *arguments]
-    subprocess.run(
-        command, cwd=ROOT, env=env, check=True, capture_output=True, text=True
+    done = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True)
+    if done.returncode:
+        print(done.stderr, file=sys.stderr)
+    done.check_returncode()
+    return done.stdout
+
+
+def wait_for_seed() -> None:
+    """Wait for the sample content, which ``up --wait`` does not wait for.
+
+    :raises SystemExit: If the seed failed.
+    """
+    container = compose("ps", "--all", "--quiet", "seed").strip()
+    done = subprocess.run(
+        ["docker", "wait", container], check=True, capture_output=True, text=True
     )
+    if done.stdout.strip() != "0":
+        print(compose("logs", "seed"), file=sys.stderr)
+        raise SystemExit(f"The seed failed with exit code {done.stdout.strip()}")
 
 
 def pages(selected: list[str]) -> list[Path]:
@@ -344,8 +361,7 @@ def main() -> int:
     for page in selected:
         compose("down", "-v", "--timeout", "2")
         compose("up", "--wait")
-        # up --wait does not wait for a service that exits
-        compose("wait", "seed")
+        wait_for_seed()
         try:
             commands, outputs, failures = check_page(page, options.update, options.demo)
         finally:
