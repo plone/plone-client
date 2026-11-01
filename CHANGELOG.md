@@ -9,6 +9,29 @@
 
 <!-- towncrier release notes start -->
 
+## 1.0.0a4 (2026-11-01)
+
+
+### New features:
+
+- The agent skill now has a reference on blocks, which `plone-client skill install` installs with it and `plone-client skill show references/blocks.md` prints. @ericof [#26](https://github.com/plone/plone-client/issues/26)
+- A dry run now adds a `warning` to a new item whose type the site would refuse in that folder. @ericof [#26](https://github.com/plone/plone-client/issues/26)
+
+
+### Bug fixes:
+
+- The MCP instructions and the skill now tell a model to create a `Document` for a section, because `Folder` usually cannot be added. @ericof [#26](https://github.com/plone/plone-client/issues/26)
+
+
+### Internal:
+
+- Checked the links to the sample data script and to PyPI, now that both exist. @ericof 
+
+
+### Documentation:
+
+- Rewrote the documentation for newcomers: a landing page with three paths, tutorials that end in a real result, an example for every service, a safety page for assistants, a glossary, and a troubleshooting guide. Commands and transcripts now run against a real site, with `make docs-check`. @ericof [#26](https://github.com/plone/plone-client/issues/26)
+
 ## 1.0.0a3 (2026-10-30)
 
 

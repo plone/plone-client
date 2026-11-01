@@ -1,1 +1,0 @@
-Rewrote the documentation for newcomers: a landing page with three paths, tutorials that end in a real result, an example for every service, a safety page for assistants, a glossary, and a troubleshooting guide. Commands and transcripts now run against a real site, with `make docs-check`. @ericof
