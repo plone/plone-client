@@ -1,0 +1,50 @@
+name: Documentation checks
+
+# The pages run against every supported Plone, once a week, so that a new
+# release of an image cannot break a tutorial unnoticed.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  pages:
+    name: "Pages: ${{ matrix.image }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - "plone/plone-backend:6.2"
+          - "plone/plone-backend:6.1"
+          - "plone/plone-backend:6.0"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Run the pages
+        env:
+          PLONE_IMAGE: ${{ matrix.image }}
+        run: make docs-check
+
+  demo:
+    name: "demo.plone.org"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      # An outage of the demo site must not fail anything.
+      - name: Run the pages that read the demo site
+        continue-on-error: true
+        run: make docs-check DEMO=1 PAGE="index.md start/script.md start/cli.md"

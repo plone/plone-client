@@ -1,5 +1,6 @@
 """Content: read, create, update, delete, copy, move, order and lock items."""
 
+from ..exceptions import PloneClientError
 from ..exceptions import PloneNotFoundError
 from ..utils import uid_from_ref
 from .base import BaseManager
@@ -156,12 +157,42 @@ class ContentManager(BaseManager):
         :param data: Field values; also ``id``, and ``UID`` (needs the
             *Manage portal* permission).
         :param fields: More field values, merged over ``data``.
-        :returns: The new item.
-        :raises PloneBadRequestError: If the id is in use, the type is not
-            allowed in the folder, or a field is invalid.
+        :returns: The new item. In a dry run, the record of the request, with
+            a ``warning`` if the site would refuse the type in the folder.
+        :raises PloneBadRequestError: If the id is in use, or a field is invalid.
+        :raises PloneForbiddenError: If the type is not allowed in the folder.
         """
+        path = self.resolve(parent)
         payload = {"@type": portal_type, **(data or {}), **fields}
-        return self._client.post(self.resolve(parent), payload)
+        answer = self._client.post(path, payload)
+        if self._client.dry_run:
+            warning = self._type_warning(path, portal_type)
+            if warning:
+                answer["warning"] = warning
+        return answer
+
+    def _type_warning(self, path: str, portal_type: str) -> str | None:
+        """Say why a dry run's new item would be refused.
+
+        A dry run sends nothing, so nothing else asks the site about the type.
+        A folder that does not exist yet, such as one planned by the same dry
+        run, cannot be asked, and gets no warning.
+
+        :param path: Path of the folder.
+        :param portal_type: Content type.
+        :returns: The warning, or ``None`` if the type can be added or the
+            site cannot say.
+        """
+        try:
+            addable = self._client.types.addable(path)
+        except PloneClientError:
+            return None
+        if portal_type in addable:
+            return None
+        return (
+            f"The site would refuse this: {portal_type} cannot be added in "
+            f"{path}. It can add: {', '.join(addable) or 'nothing'}."
+        )
 
     def update(
         self,

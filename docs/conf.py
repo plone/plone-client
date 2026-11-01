@@ -39,7 +39,14 @@ extensions = [
     "sphinxext.opengraph",
 ]
 
-exclude_patterns = ["_build", "_examples", "_styles"]
+exclude_patterns = [
+    "_build",
+    "_checks",
+    "_examples",
+    "_generate",
+    "_generated",
+    "_styles",
+]
 
 # -- MyST -------------------------------------------------------------------
 
@@ -90,6 +97,8 @@ linkcheck_ignore = [
     r"https://www\.npmjs\.com/.*",
     # The package is not on PyPI yet.
     r"https://pypi\.org/project/plone-client.*",
+    # Exists once the branch that adds it is merged.
+    r"https://github\.com/plone/plone-client/blob/main/docs/_checks/seed\.py",
 ]
 
 # -- HTML output ------------------------------------------------------------

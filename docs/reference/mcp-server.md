@@ -6,11 +6,16 @@ myst:
     "property=og:title": "MCP server"
 ---
 
+<!-- vale Vale.Terms = NO -->
+
+(reference-mcp-server)=
 (reference-assistant-server)=
 
 # MCP server
 
-`plone-client mcp` serves one site, or several, to MCP clients over standard input and output.
+<!-- vale Vale.Terms = YES -->
+
+`plone-client mcp` serves one site, or several, to {term}`MCP` clients, over standard input and output or over HTTP.
 It needs the `mcp` extra, which adds the official MCP Python SDK.
 
 ## Command
@@ -62,6 +67,9 @@ With one site, from `--site` or otherwise, tools have no `site` argument and the
 
 ## Choosing the tools
 
+```{versionadded} 1.0.0a2
+```
+
 The model reads the description of every tool the server offers, so a long list costs context in every conversation.
 `--tool` offers only the tools named:
 
@@ -70,22 +78,22 @@ plone-client mcp --profile blog --tool search --tool get_content --tool list_blo
 ```
 
 With several sites, `list_sites` is offered too.
+{ref}`howto-protect` recommends sets of tools.
 
 (reference-assistant-server-resources)=
 
 ## Resources
 
+```{versionadded} 1.0.0a3
+```
+
 Each site also has read-only resources: data that you, or the application you use, can attach to a conversation.
 The model calls tools by itself, while how resources are used depends on the application, so they add to the tools and do not replace them.
 
-| URI | Media type | Tool that decides whether it is offered | Returns |
-|---|---|---|---|
-| `plone://<site>/site` | `application/json` | `get_content` | The root of the site. |
-| `plone://<site>/content/<path>` | `application/json` | `get_content` | The full JSON of an item, by its path in the site. |
-| `plone://<site>/types` | `application/json` | `content_types` | The content types. |
-| `plone://<site>/types/<portal_type>` | `application/json` | `content_types` | The JSON schema of a content type. |
-| `plone://<site>/blocks` | `text/markdown` | `block_types` | The blocks of the site; see {ref}`reference-managers-block-types`. |
-| `plone://<site>/blocks/<block_id>` | `text/markdown` | `block_types` | The docs, schema, and variations of a block. |
+```{include} ../_generated/mcp-resources.md
+```
+
+`get_content` decides whether `site` and `content` are offered, `content_types` decides for `types`, and `block_types` decides for `blocks`.
 
 `<site>` is the name of the profile, percent-encoded, and `site` for a server that was built from a client rather than from profiles.
 With `--tool`, a resource is offered only when the tool in the table is, so resources do not widen the access that you chose.
@@ -97,6 +105,9 @@ The server's instructions are the same whatever the tools, so they may mention t
 (reference-assistant-server-http)=
 
 ## Over HTTP
+
+```{versionadded} 1.0.0a2
+```
 
 <!-- source: src/plone_client/mcp_server.py, src/plone_client/credentials.py, src/plone_client/cli/mcp.py -->
 
@@ -124,48 +135,23 @@ Tools run one at a time per site, so that operations and block edits from severa
 
 The server writes the address it listens on to standard error, and stops on `Ctrl+C` or `SIGTERM`.
 
-## Tools that read
+(reference-assistant-server-tool-list)=
 
-| Tool | Arguments | Returns |
-|---|---|---|
-| `site_info` | none | URL, `frontend_url`, whether the server is logged in and as whom, `credentials_rejected` (true when a username or token is configured but the site answers as anonymous), `read_only`, `dry_run`, and the Plone version. |
-| `get_content` | `path`, `fields`, `expand` | One item, without the items it contains; only the keys in `fields`, when given. |
-| `list_blocks` | `path` | `@id` and `blocks`: an outline of the item's blocks, in order, from {func}`~plone_client.blocks.outline`: `id`, `@type`, the start of their `text`, and the `blocks` inside containers. |
-| `list_children` | `path`, `portal_type`, `limit` (1–500, default 50) | `items` inside a folder, in the folder's order, and `items_count`. |
-| `search` | `path`, `text`, `portal_type`, `review_state`, `depth`, `query`, `sort_on`, `descending`, `limit` (1–500, default 25) | `items` found and `items_count`. `query` holds any other catalog index. |
-| `get_navigation` | `path`, `depth` (1–5, default 2) | The navigation tree. |
-| `content_types` | `portal_type`, `addable_in` | The content types, or the JSON schema of `portal_type`. |
-| `block_types` | `block_id`, `path` | Markdown: the blocks of the site, or the docs, schema, and variations of one block; see {ref}`reference-managers-block-types`. |
-| `get_workflow` | `path` | `state` of an item and the `transitions` it can run now, each with `id` and `title`. |
-| `get_vocabulary` | `vocabulary`, `path`, `title`, `limit` (1–500, default 50) | Without `vocabulary`, the vocabularies of the site; with it, `items` (`token` and `title`) and `items_total`. |
-| `get_translations` | `path` | The translations linked to an item; needs `plone.app.multilingual`. |
-| `get_working_copy` | `path` | The working copy of an item, or the item a working copy belongs to; needs `plone.app.iterate`. |
-| `call_service` | `method`, `path`, `params`, `body` | `status` and `body` of any `plone.restapi` request. |
+## Tools
+
+```{include} ../_generated/mcp-tools.md
+```
+
+A `?` marks an optional argument.
+With several sites, every tool but `list_sites` also takes a required `site`.
+The column *Effect* comes from the tool's annotations: `reads`, `adds` (`destructiveHint: false`), `changes` (`destructiveHint`), and `changes, repeatable` (`destructiveHint`, `idempotentHint`).
+A client should not retry a tool that is only `changes`: running it twice does not give the same result.
+
+`create_page` is offered only when `collective.html2blocks` is installed.
+`get_translations` needs `plone.app.multilingual`, and `get_working_copy` needs `plone.app.iterate`.
+`create_content_with_files`, `create_page`, and `upload_tree` read local paths on the computer of the server.
 
 `call_service` is offered in every mode, and follows the server's read-only and dry run settings like any other request.
-
-## Tools that change the site
-
-| Tool | Arguments | Does |
-|---|---|---|
-| `create_content` | `parent`, `portal_type`, `data`, `publish` | Create one item; returns its summary. |
-| `update_content` | `path`, `data` | Change fields of an item. |
-| `run_transition` | `path`, `transition`, `comment`, `include_children` | Run a workflow transition. |
-| `delete_content` | `paths` | Delete items. |
-| `create_content_with_files` | `parent`, `portal_type`, `files`, `data`, `lead_image`, `publish` | {func}`~plone_client.operations.create_with_files`; `files` are local paths. |
-| `create_page` | `parent`, `source`, `source_format`, `portal_type`, `title`, `description`, `data`, `files`, `lead_image`, `publish`, `blocks` | {func}`~plone_client.operations.create_page`. `portal_type` defaults to `Document` and must have blocks; `content_types` lists the types addable in a folder. Offered only when `collective.html2blocks` is installed. |
-| `upload_tree` | `local_path`, `parent`, `convert_pages`, `publish`, `blocks` | {func}`~plone_client.operations.upload_tree`. |
-| `copy_content` | `sources`, `target` | {func}`~plone_client.operations.copy_items`. |
-| `move_content` | `sources`, `target` | {func}`~plone_client.operations.move_items`. |
-| `add_blocks` | `path`, `items`, `after`, `position` | {func}`~plone_client.operations.add_blocks`. |
-| `update_block` | `path`, `block_id`, `data`, `replace` | {func}`~plone_client.operations.update_block`. |
-| `remove_blocks` | `path`, `block_ids` | {func}`~plone_client.operations.remove_blocks`. |
-| `set_blocks` | `path`, `items` | {func}`~plone_client.operations.set_blocks`. |
-| `link_translation` | `path`, `translation` | Link an existing item as a translation. |
-| `unlink_translation` | `path`, `language` | Remove the link to the translation in `language`; both items stay. |
-| `check_out` | `path` | Check out an item into a working copy; returns its `@id`. |
-| `check_in` | `path` | Apply a working copy to its item and remove the working copy. |
-| `cancel_working_copy` | `path` | Remove a working copy without applying it. |
 
 The `blocks` argument of `create_page` and `upload_tree` chooses the block types that Markdown and HTML become, merged over the `blocks` setting of the site's profile; see {ref}`reference-configuration-blocks`.
 When a site has such a setting, the server's instructions state it.
@@ -174,6 +160,9 @@ The tools that run an operation return its {class}`~plone_client.operations.Oper
 Paths are site paths such as `/news/item`; the `@id` URLs that tools return work too.
 
 ### Blocks
+
+```{versionadded} 1.0.0a2
+```
 
 The tools that take blocks take them as a list, in order, each with an `@type`.
 The server gives them ids and builds the layout, and goes through {func}`~plone_client.blocks.normalize`: a string `href` becomes a list of links, and a container such as a `gridBlock` can list its own `blocks` the same way.
@@ -199,16 +188,6 @@ A block without `@type` is refused with `ValueError` before any request is sent.
 They work on blocks inside containers too, and return an outline of the saved blocks in `item.blocks`.
 They take no lock, so a change someone else saves between the read and the write is lost.
 
-## Tool annotations
-
-| Annotation | Tools |
-|---|---|
-| `readOnlyHint` | `list_sites`, and the tools that read, except `call_service`. |
-| `destructiveHint: false` | `create_content`, `create_content_with_files`, `create_page`, `upload_tree`, `copy_content`, `add_blocks`, `link_translation`, `check_out`. |
-| `destructiveHint`, `idempotentHint` | `update_content`, `update_block`, `set_blocks`. |
-| `destructiveHint`, `idempotentHint: false` | `run_transition`, `move_content`, `check_in`, `call_service`: running them twice does not give the same result, so a client should not retry them. |
-| `destructiveHint` | `delete_content`, `remove_blocks`, `unlink_translation`, `cancel_working_copy`. |
-
 (reference-assistant-server-modes)=
 
 ## Modes
@@ -221,10 +200,15 @@ They take no lock, so a change someone else saves between the read and the write
 
 Read-only applies per site: a site is read-only with `--read-only` or when its profile has `read_only = true`.
 The tools that change a site are offered when at least one site is not read-only.
-A tool that would change a read-only site is refused with `PloneReadOnlyError` before any request is sent.
+A tool that would change a read-only site is refused with `PloneReadOnlyError` before any change is sent; it can read from the site first.
 
-The server's instructions, which MCP clients pass to the model, describe the Volto content model and say which sites are read-only and whether the server is in a dry run.
+The server's {term}`instructions`, which MCP clients pass to the model, describe the Volto content model and say which sites are read-only and whether the server is in a dry run.
 When the credentials of a site were rejected, the instructions warn about it and name the fix.
+
+````{dropdown} The instructions of every server
+```{include} ../_generated/mcp-instructions.md
+```
+````
 
 ### Rejected credentials
 
@@ -245,3 +229,4 @@ An operation that stops part way also returns `result`, with what it had done.
 - {ref}`howto-assistant` connects an assistant to a site.
 - {ref}`explanation-interfaces` compares the MCP server, the command line, and the agent skill.
 - {ref}`reference-operations` lists the requests of each operation.
+- {ref}`howto-protect` chooses a mode and a short list of tools.

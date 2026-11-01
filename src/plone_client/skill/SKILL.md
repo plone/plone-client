@@ -1,6 +1,6 @@
 ---
 name: plone-client
-description: Read and change content on a Plone site with the plone-client command line — list, search, create, update, publish, upload, and delete items, manage users and groups, and call any plone.restapi service. Use when the user asks to work with a Plone site's content or configuration, or mentions plone-client, plone.restapi, Volto content, or a Plone profile.
+description: Read and change content on a Plone site with the plone-client command line — list, search, create, update, publish, upload, and delete items, write Volto pages and blocks, manage users and groups, and call any plone.restapi service. Use when the user asks to work with a Plone site's content or configuration, or mentions plone-client, plone.restapi, Volto content, or a Plone profile.
 ---
 
 # plone-client
@@ -16,7 +16,10 @@ Results are JSON on standard output; errors are JSON on standard error with a me
 - Before changing a site other than a local one, run the command with `-n` (dry run) and show the user the requests it would send.
 - Never pass `--yes` to `delete`, `users delete`, or `groups delete` unless the user confirmed the exact items.
 - Exit code 7 means the profile is read-only. Do not work around it; tell the user.
+- A dry run shows the request, not the site's answer: apart from a `warning` on a refused type, a request that passes `-n` can still fail.
 - Use `-f` to keep only the keys you need, so the output stays small.
+- Read the `@id` of what a command creates: the site may change the id you asked for (`/blocks` became `/blocks-1`).
+- After a change that matters, read the item back: a success does not prove that every field was stored.
 
 ## Choosing the site
 
@@ -37,7 +40,6 @@ plone-client get /news/item -f @id,title,review_state
 plone-client ls /news -f @id,title,review_state
 plone-client search /news -q "keyword" -t "News Item" --state published --limit 10 -f @id,title
 plone-client search -i Subject=plone --count
-plone-client blocks /news/item           # summary of the Volto blocks
 plone-client resolve uid:0123456789abcdef
 plone-client history /news/item
 plone-client sharing /news/item
@@ -83,12 +85,20 @@ plone-client upload-tree ./handbook /docs --pages               # folders as pag
 ## Content model
 
 - Run `plone-client types <type>` before setting fields: the site silently ignores fields a type does not have.
-- On Volto sites there is usually no `Folder` type; `Document` items are folderish.
+- On Volto sites `Folder` usually cannot be added; `-n` adds a `warning` to an item the site would refuse.
+  For a section such as `/news`, create a `Document`, which is folderish; `plone-client types --addable-in <path>` lists what a folder can hold.
 - A News Item's lead image on a Volto site is `preview_image_link`, a relation to an Image inside the item; other sites have an `image` field.
   `create-with-files` picks the right one from the type's schema.
-- `create` adds a title block and a description block unless given `--no-blocks` or `blocks` in the data.
-- Before writing blocks by hand, run `plone-client block-types --markdown` for the blocks the site offers, and `plone-client block-types <block> --markdown` for the data one takes.
-  A `"source": "builtin"` answer describes only Volto's core blocks: the site did not say which blocks it has.
+- New items are private until a workflow transition such as `publish` runs; `create` and `create-page` take `--publish`.
+
+## Blocks
+
+The text of a Volto page lives in blocks, not in a text field, and a page without them shows nothing.
+To write prose, use `create-page`.
+`create` adds a title block and a description block, unless given `--no-blocks` or `blocks` in the data.
+
+`update` with `blocks` replaces all of them.
+Before you write or change blocks, read [references/blocks.md](references/blocks.md), or run `plone-client skill show references/blocks.md`.
 
 ## Site administration
 
@@ -119,9 +129,9 @@ plone-client request POST /news/item/@lock -d '{}'
 | 1 | Unexpected error, or a refused confirmation |
 | 2 | Invalid usage, invalid JSON, or a destructive command without `--yes` |
 | 3 | Configuration: unknown profile, missing secret, no site configured |
-| 4 | Not authenticated, not allowed, or the item is locked |
+| 4 | Not authenticated, not allowed, the item is locked, or the type cannot be added here |
 | 5 | Not found |
-| 6 | Invalid request or conflict |
+| 6 | Invalid request or conflict, such as an id in use or an invalid field |
 | 7 | Refused by a read-only profile or `--read-only` |
 | 8 | The site could not be reached |
 | 9 | Server error |

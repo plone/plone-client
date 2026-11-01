@@ -11,8 +11,8 @@ and does whichever the site expects.
 
 Usage::
 
-    python docs/_examples/publish_news.py news.txt /news --image lead.jpg
-    python docs/_examples/publish_news.py news.txt /news --image lead.jpg --apply
+    python docs/_checks/examples/publish_news.py news.txt /news --image lead.jpg
+    python docs/_checks/examples/publish_news.py news.txt /news --image lead.jpg --apply
 """
 
 from pathlib import Path

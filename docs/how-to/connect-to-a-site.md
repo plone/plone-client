@@ -58,7 +58,7 @@ client = PloneClient.from_env(prefix="REMOTE_")
 
 ## Use a profile
 
-On a workstation, a profile keeps the password in the operating system's keyring.
+On a workstation, a {term}`profile` keeps the password in the operating system's {term}`keyring`.
 Create profiles with the command line, as {ref}`howto-profiles` shows, then read one.
 
 ```python

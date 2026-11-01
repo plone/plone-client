@@ -331,7 +331,7 @@ def test_create_content_dry_run(client_factory, site):
         publish="publish",
     )
     assert result["dry_run"] is True
-    assert site.requests == []
+    assert {r.method for r in site.requests} <= {"GET"}
 
 
 def test_create_content_takes_a_list_of_blocks(client, site):

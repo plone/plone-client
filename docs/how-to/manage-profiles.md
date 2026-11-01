@@ -10,7 +10,7 @@ myst:
 
 # Manage profiles
 
-This guide shows you how to keep the connection settings of several sites as profiles, with their secrets outside the configuration file.
+This guide shows you how to keep the connection settings of several sites as {term}`profiles <profile>`, with their secrets outside the configuration file.
 
 ## Add a profile
 
@@ -18,7 +18,7 @@ This guide shows you how to keep the connection settings of several sites as pro
 plone-client profile add local --url http://localhost:8080/Plone --username admin --use
 ```
 
-`profile add` asks for the password and stores it in the keyring.
+`profile add` asks for the password and stores it in the {term}`keyring`.
 `--use` makes the profile the current one.
 
 To refuse every change to a site, add `--read-only`.
@@ -26,6 +26,8 @@ To refuse every change to a site, add `--read-only`.
 ```shell
 plone-client profile add prod --url https://example.org --username editor --read-only
 ```
+
+To make an existing profile read-only, set `read_only = true` in its table of the configuration file; see {ref}`reference-configuration`.
 
 To pass the password from a script instead of typing it, use `--password-stdin`.
 
@@ -44,6 +46,8 @@ plone-client profile add prod --url https://example.org --username editor \
 ```
 
 If the secret arrives as an environment variable, name the variable.
+Without `--secret-env`, the variable is `PLONE_CLIENT_PASSWORD`.
+It must be set in every shell that uses the profile.
 
 ```shell
 plone-client profile add ci --url https://staging.example.org --username bot \

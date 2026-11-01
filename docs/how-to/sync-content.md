@@ -16,13 +16,15 @@ Each run creates the pages for new records, updates the pages whose records chan
 ## Choose a key
 
 A sync must know which page belongs to which record.
-Use the item's id, the last segment of its URL, and derive it from a stable identifier of the record, never from a title that may change.
+Use the id of the item, which is the last segment of its URL.
+Derive it from a stable identifier of the record, never from a title that may change.
 
 If the id cannot be stable, store the record's identifier in a field of the page, and find pages with a catalog query on that field instead.
 
 ## Read the folder once
 
 List the folder before going through the records, instead of asking the site about each record.
+The snippets on this page are parts of {ref}`the complete script <howto-sync-script>`, which defines `folder`, `records`, `page_data`, and `changed`.
 
 ```python
 existing = {
@@ -43,15 +45,16 @@ for record in records:
     elif changed(client.content.get(entry["@id"], include_items=False), record):
         client.content.update(entry["@id"], page_data(record), representation=False)
 
-for entry in existing.values():
-    client.content.delete(entry["@id"])
+if prune:
+    for entry in existing.values():
+        client.content.delete(entry["@id"])
 ```
 
 Update only the pages that changed, so their modification dates and version history stay meaningful.
 `representation=False` skips sending the changed page back, which a sync does not need.
 
 Whatever is left in `existing` after the loop has no record any more.
-Make deleting it an explicit choice of whoever runs the sync.
+The `prune` flag makes deleting it an explicit choice of whoever runs the sync.
 
 ## Plan before changing
 
@@ -62,16 +65,18 @@ A client created with `dry_run=True` reads the site as usual but records each ch
 client = PloneClient.from_env(dry_run=not args.apply)
 ```
 
-In a dry run, a create returns a description of the request it skipped, not the new item.
+In a {term}`dry run`, a create returns a description of the request it skipped, not the new item.
 Stop before any step that needs the new item's `@id`.
 
 ## Run it on a schedule
 
 A sync run by cron or CI has nobody to type a password.
-Give it the settings through the environment and use {meth}`~plone_client.PloneClient.from_env`.
+Give it the settings through the environment and use {meth}`~plone_client.PloneClient.from_env`; {ref}`reference-configuration` lists the variables.
 
 Requests that fail because of a dropped connection or an overloaded site are retried.
 A create is never retried, so it never runs twice.
+
+(howto-sync-script)=
 
 ## The complete script
 
@@ -83,7 +88,7 @@ python sync_json.py records.json /news/releases
 python sync_json.py records.json /news/releases --apply --prune
 ```
 
-```{literalinclude} ../_examples/sync_json.py
+```{literalinclude} ../_checks/examples/sync_json.py
 :language: python
 ```
 

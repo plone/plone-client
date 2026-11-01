@@ -4,6 +4,7 @@ from . import panels
 from .output import emit
 from .output import PloneGroup
 from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Annotated
 
@@ -17,22 +18,51 @@ app = typer.Typer(
 )
 
 SKILL_NAME = "plone-client"
+SKILL_FILE = "SKILL.md"
 PROJECT_DIR = Path(".claude") / "skills"
 USER_DIR = Path("~") / ".claude" / "skills"
 
 
-def skill_text() -> str:
-    """Contents of the skill's ``SKILL.md``.
+def skill_files(
+    folder: Traversable | None = None, prefix: str = ""
+) -> dict[str, Traversable]:
+    """Files of the skill.
 
+    :param folder: Folder to list; the root of the skill by default.
+    :param prefix: Path of that folder inside the skill.
+    :returns: Each file, by its path inside the skill.
+    """
+    folder = folder or files("plone_client").joinpath("skill")
+    found: dict[str, Traversable] = {}
+    for entry in folder.iterdir():
+        path = f"{prefix}{entry.name}"
+        if entry.is_dir():
+            found.update(skill_files(entry, f"{path}/"))
+        elif entry.name.endswith(".md"):
+            found[path] = entry
+    return found
+
+
+def skill_text(name: str = SKILL_FILE) -> str:
+    """Contents of a file of the skill.
+
+    :param name: Path of the file inside the skill.
     :returns: The Markdown text.
     """
-    return files("plone_client").joinpath("skill", "SKILL.md").read_text()
+    return skill_files()[name].read_text(encoding="utf-8")
 
 
 @app.command(rich_help_panel=panels.BROWSE)
-def show() -> None:
-    """Print the skill's SKILL.md."""
-    typer.echo(skill_text(), nl=False)
+def show(
+    name: Annotated[
+        str, typer.Argument(help="File of the skill, such as references/blocks.md.")
+    ] = SKILL_FILE,
+) -> None:
+    """Print the skill's SKILL.md, or another file of the skill."""
+    if name not in skill_files():
+        known = ", ".join(sorted(skill_files()))
+        raise typer.BadParameter(f"{name} is not in the skill: {known}")
+    typer.echo(skill_text(name), nl=False)
 
 
 @app.command(rich_help_panel=panels.WRITE)
@@ -53,12 +83,15 @@ def install(
 ) -> None:
     """Install the skill, replacing an older copy.
 
-    The skill goes in <directory>/plone-client/SKILL.md, where agents that
-    read Agent Skills, such as Claude Code, find it.
+    The skill goes in <directory>/plone-client/, with SKILL.md and its
+    references, where agents that read Agent Skills, such as Claude Code,
+    find it.
     """
     base = directory or (USER_DIR if user else PROJECT_DIR)
-    target = base.expanduser() / SKILL_NAME / "SKILL.md"
-    replaced = target.exists()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(skill_text())
-    emit(ctx, {"installed": str(target), "replaced": replaced})
+    root = base.expanduser() / SKILL_NAME
+    replaced = (root / SKILL_FILE).exists()
+    for name in skill_files():
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(skill_text(name), encoding="utf-8")
+    emit(ctx, {"installed": str(root / SKILL_FILE), "replaced": replaced})

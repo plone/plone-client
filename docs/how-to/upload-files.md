@@ -63,7 +63,7 @@ from plone_client import file_data
 client.content.update("/news/hello", image=file_data("lead.jpg"))
 ```
 
-`plone.restapi` ignores a field that the content type does not have, without reporting an error.
+`plone.restapi` ignores a field that the {term}`content type` does not have, without reporting an error.
 Check the type's schema with `client.types.get("News Item")["properties"]` first, as {ref}`howto-publish-news` does.
 
 ## Download a file
@@ -81,5 +81,5 @@ plone-client download /images/photo.jpg -o photo.jpg
 
 ## Related
 
-- {ref}`howto-publish-news` attaches a lead image to a news item.
+- {ref}`howto-publish-news` attaches a {term}`lead image` to a news item.
 - {ref}`reference-managers` documents {class}`~plone_client.managers.files.FilesManager`.

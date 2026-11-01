@@ -174,7 +174,7 @@ def _created(
         return _summary(answer, **extra)
     item_id = data.get("id") or slug(str(data.get("title") or "item"))
     url = client.site_url(f"{parent.rstrip('/')}/{item_id}")
-    return {
+    entry = {
         "@id": url,
         "@type": data.get("@type"),
         "id": item_id,
@@ -182,6 +182,9 @@ def _created(
         "planned": True,
         **extra,
     }
+    if "warning" in answer:
+        entry["warning"] = answer["warning"]
+    return entry
 
 
 def _check_files(paths: Iterable[str | Path]) -> list[Path]:

@@ -84,6 +84,8 @@ jobs:
   docs:
     name: "Documentation"
     uses: ./.github/workflows/docs.yml
+    with:
+      check-links: true
     permissions:
       contents: read
       pages: write

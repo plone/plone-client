@@ -5,13 +5,25 @@ from pathlib import Path
 from plone_client import PloneClient
 
 import httpx
+import os
 import pytest
+
+
+# Any free port: the fixed ones of the compose file are for readers of the docs.
+os.environ["PLONE_PORT"] = "0"
+os.environ["VOLTO_PORT"] = "0"
 
 
 @pytest.fixture(scope="session")
 def docker_compose_file() -> str:
     """The compose file of the Plone site."""
-    return str(Path(__file__).parent / "docker-compose.yml")
+    return str(Path(__file__).parents[2] / "docker-compose.yml")
+
+
+@pytest.fixture(scope="session")
+def docker_setup() -> list[str]:
+    """Start the site without its sample content."""
+    return ["up --build --wait plone volto"]
 
 
 def _is_ready(url: str) -> bool:

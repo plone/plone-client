@@ -14,9 +14,9 @@ The records file holds a list of objects::
 
 Usage::
 
-    python docs/_examples/sync_json.py records.json /news/releases
-    python docs/_examples/sync_json.py records.json /news/releases --apply --prune
-    python docs/_examples/sync_json.py records.json /news --profile local --apply
+    python docs/_checks/examples/sync_json.py records.json /news/releases
+    python docs/_checks/examples/sync_json.py records.json /news/releases --apply --prune
+    python docs/_checks/examples/sync_json.py records.json /news --profile local --apply
 """
 
 from pathlib import Path

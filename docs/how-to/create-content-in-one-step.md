@@ -52,8 +52,8 @@ plone-client create-page /docs getting-started.md --publish publish
 
 For HTML, pass `source_format="html"` in Python, or `--html` on the command line; a file ending in `.html` is read as HTML.
 To give the title yourself, pass `title`, or `--title`.
-To create the page as another type with blocks, pass `portal_type`, or `--type`.
-To upload files inside the page too, pass `files`, or `--file` once per file; the lead image is set as described below.
+To create the page as another type with {term}`blocks <block>`, pass `portal_type`, or `--type`.
+To upload files inside the page too, pass `files`, or `--file` once per file; the {term}`lead image` is set as described below.
 
 ## Choose the block types
 
@@ -86,13 +86,13 @@ plone-client create-page /docs install.md --blocks '{"codeBlock": {"style": "dar
 ::::
 
 `upload_tree` takes the same setting, for the pages it converts.
-To use a setting for every page of a site, put it in the profile's `blocks` table; a setting passed to one call is merged over it.
+To use a setting for every page of a site, put it in the {term}`profile`'s `blocks` table; a setting passed to one call is merged over it.
 {ref}`reference-configuration-blocks` lists the values.
 
 ## Create an item with its images
 
 Pass the files to upload inside the item.
-The first image becomes the lead image, stored the way the type expects: in its `image` field, or in `preview_image_link`, as News Items on Volto sites do.
+The first image becomes the lead image, stored the way the type expects: in its `image` field, or in `preview_image_link`, as News Items on {term}`Volto` sites do.
 
 ::::{tab-set}
 :sync-group: interface

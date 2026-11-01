@@ -87,7 +87,7 @@ uv tool install "plone-client[mcp,markdown]"
 
 ## Use both
 
-If your code reads the profiles of the command line with {meth}`~plone_client.PloneClient.from_profile`, add the extra to your project's dependencies too.
+If your code reads the {term}`profiles <profile>` of the command line with {meth}`~plone_client.PloneClient.from_profile`, add the extra to your project's dependencies too.
 
 ```shell
 uv add "plone-client[cli]"

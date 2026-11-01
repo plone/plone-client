@@ -10,13 +10,17 @@ MAKEFLAGS+=--no-builtin-rules
 .DEFAULT_GOAL := help
 
 SRC := src/plone_client
-CODE := src tests docs/_examples
+CODE := src tests docs/_checks docs/_generate
 UV ?= uv
 
 DOCS_DIR := docs
 DOCS_BUILDDIR := $(DOCS_DIR)/_build
 DOCS_SPHINXOPTS ?=
 DOCS_VALEOPTS ?=
+PAGE ?=
+DEMO ?=
+UPDATE ?=
+CHECK_OPTIONS := $(if $(DEMO),--demo) $(if $(UPDATE),--update)
 DOCS_VALEFILES = $(shell find $(DOCS_DIR) -type f -name "*.md" -not -path "$(DOCS_BUILDDIR)/*" -not -path "$(DOCS_DIR)/_styles/*" -print)
 
 # installed?
@@ -106,6 +110,33 @@ docs-vale: ## Check the documentation with Vale
 	@echo -e "$(GREEN)==> Check documentation with Vale$(RESET)"
 	@$(UV) run --group docs vale sync
 	@$(UV) run --group docs vale --no-wrap $(DOCS_VALEOPTS) $(DOCS_VALEFILES)
+
+.PHONY: docs-generate
+docs-generate: install ## Regenerate the tables of commands, tools and resources
+	@echo -e "$(GREEN)==> Generate documentation tables$(RESET)"
+	@$(UV) run --all-extras python docs/_generate/cli_options.py
+	@$(UV) run --all-extras python docs/_generate/mcp_tools.py
+
+.PHONY: docs-generate-check
+docs-generate-check: install ## Fail when a generated table is out of date
+	@echo -e "$(GREEN)==> Check generated documentation tables$(RESET)"
+	@$(UV) run --all-extras python docs/_generate/cli_options.py --check
+	@$(UV) run --all-extras python docs/_generate/mcp_tools.py --check
+
+.PHONY: docs-services
+docs-services: install ## Regenerate the service examples against a fresh site in Docker
+	@echo -e "$(GREEN)==> Generate service examples$(RESET)"
+	@$(UV) run --all-extras python docs/_generate/services.py
+
+.PHONY: docs-services-check
+docs-services-check: install ## Fail when a service example no longer matches a real site
+	@echo -e "$(GREEN)==> Check service examples$(RESET)"
+	@$(UV) run --all-extras python docs/_generate/services.py --check
+
+.PHONY: docs-check
+docs-check: install ## Run the pages against a fresh site in Docker (PAGE=…, DEMO=1, UPDATE=1)
+	@echo -e "$(GREEN)==> Run documentation pages$(RESET)"
+	@$(UV) run --all-extras python docs/_checks/run.py $(CHECK_OPTIONS) $(PAGE)
 
 .PHONY: docs-clean
 docs-clean: ## Remove the built documentation
