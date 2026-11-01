@@ -95,10 +95,6 @@ linkcheck_ignore = [
     r"https://github\.com/.*#.*",
     # npm answers automated clients with 403.
     r"https://www\.npmjs\.com/.*",
-    # The package is not on PyPI yet.
-    r"https://pypi\.org/project/plone-client.*",
-    # Exists once the branch that adds it is merged.
-    r"https://github\.com/plone/plone-client/blob/main/docs/_checks/seed\.py",
 ]
 
 # -- HTML output ------------------------------------------------------------
