@@ -157,8 +157,8 @@ class ContentManager(BaseManager):
             *Manage portal* permission).
         :param fields: More field values, merged over ``data``.
         :returns: The new item.
-        :raises PloneBadRequestError: If the id is in use, the type is not
-            allowed in the folder, or a field is invalid.
+        :raises PloneBadRequestError: If the id is in use, or a field is invalid.
+        :raises PloneForbiddenError: If the type is not allowed in the folder.
         """
         payload = {"@type": portal_type, **(data or {}), **fields}
         return self._client.post(self.resolve(parent), payload)

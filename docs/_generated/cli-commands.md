@@ -602,7 +602,11 @@ Install the skill, replacing an older copy.
 
 ### `skill show`
 
-Print the skill's `SKILL.md`.
+Print the skill's `SKILL.md`, or another file of the skill.
+
+| Argument or option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | str | no | `SKILL.md` | File of the skill, such as references/`blocks.md`. |
 
 (cli-types)=
 

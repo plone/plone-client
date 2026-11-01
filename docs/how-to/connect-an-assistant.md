@@ -95,20 +95,7 @@ Pass `--scope user` to make it available in every project, or `--scope project` 
 :::{tab-item} Claude Desktop
 :sync: claude-desktop
 
-Add the server to `claude_desktop_config.json`, in {menuselection}`Settings --> Developer --> Edit Config`, then restart Claude Desktop.
-
-```json
-{
-  "mcpServers": {
-    "plone-blog": {
-      "command": "plone-client",
-      "args": ["mcp", "--profile", "blog"]
-    }
-  }
-}
-```
-
-If Claude Desktop cannot find `plone-client`, write its full path in `command`, which `which plone-client` prints.
+{ref}`howto-claude-desktop` goes through every step, from the installation to the first question.
 :::
 
 :::{tab-item} Cursor

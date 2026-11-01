@@ -53,6 +53,8 @@ NORMALIZE = [
     (re.compile(r'("plone_version": )"[^"]+"'), r'\1"<VERSION>"'),
     (re.compile(r'("time": )[\d.]+'), r"\1<TIME>"),
     (re.compile(r"plone-client/\d[\w.]*"), "plone-client/<VERSION>"),
+    # The number of an error differs between systems
+    (re.compile(r"\[Errno \d+\]"), "[Errno <NUMBER>]"),
     (re.compile(r"/(private/)?(var|tmp)/[^\s\"']*/check-[^\s\"'/]*"), "<TMP>"),
 ]
 
@@ -353,7 +355,8 @@ def main() -> int:
         )
         for failure in failures:
             print(failure)
-        failed = failed or bool(failures) or not commands
+        # A page of demo blocks runs nothing without --demo
+        failed = failed or bool(failures) or (options.demo and not commands)
     print("FAILED" if failed else f"OK: {len(selected)} pages")
     return 1 if failed else 0
 

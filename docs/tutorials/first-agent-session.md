@@ -109,7 +109,7 @@ Add what only you know to `AGENTS.md`, which agents read when they open the proj
 # Newsroom
 
 - Profiles: `local` is the default and safe to change. `production` is read only: pass `-p production` to read it.
-- News goes in `/news`, as `News Item`.
+- News goes in `/news`, as `News Item`. If `/news` is missing, create it as a `Document`, because this site cannot add a `Folder`.
 - Show me the dry run before you change anything.
 ```
 

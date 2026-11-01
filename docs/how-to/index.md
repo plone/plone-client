@@ -35,6 +35,7 @@ use-the-cli-in-scripts-and-ci
 replace-a-hand-written-client
 use-with-coding-agents
 connect-an-assistant
+connect-claude-desktop
 protect-a-site-from-an-agent
 build-a-custom-agent
 troubleshoot
@@ -194,6 +195,13 @@ Give an agent the skill and the command line.
 :link-type: doc
 
 Serve a site to an MCP client.
+````
+
+````{grid-item-card} 🖥️ Connect Claude Desktop
+:link: connect-claude-desktop
+:link-type: doc
+
+Set up the desktop application, step by step.
 ````
 
 ````{grid-item-card} 🛡️ Protect a site from an agent

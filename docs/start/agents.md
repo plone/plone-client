@@ -19,7 +19,8 @@ Where your model runs decides what to set up.
 | Your model runs | Use | Start with |
 |---|---|---|
 | In a terminal or an editor, such as Claude Code, Codex, or Cursor | The {term}`skill` and the command line | {ref}`howto-agents` |
-| In a chat application, such as Claude Desktop | The {term}`MCP` server, over standard input and output | {ref}`howto-assistant` |
+| In Claude Desktop | The {term}`MCP` server, over standard input and output | {ref}`howto-claude-desktop` |
+| In another chat application | The MCP server, over standard input and output | {ref}`howto-assistant` |
 | On another computer, or shared by a team | The MCP server, over HTTP | {ref}`howto-assistant` |
 | In your own code | The Python library | {ref}`howto-custom-agent` |
 

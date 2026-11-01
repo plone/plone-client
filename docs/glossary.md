@@ -52,7 +52,7 @@ portal_type
 
 folderish
   Said of a {term}`content item` that can hold others.
-  On a {term}`Volto` site, a `Document` is folderish, and there is usually no `Folder` type.
+  On a {term}`Volto` site, a `Document` is folderish, and the `Folder` type usually cannot be added.
 
 block
   One piece of a page on a {term}`Volto` site, such as a paragraph, an image, or a grid.

@@ -19,12 +19,13 @@ plone-client ships an [Agent Skill](https://agentskills.io/): a `SKILL.md` file 
 
 | Command | File |
 |---|---|
-| `plone-client skill install` | `.claude/skills/plone-client/SKILL.md` |
-| `plone-client skill install --user` | `~/.claude/skills/plone-client/SKILL.md` |
-| `plone-client skill install --dir DIR` | `DIR/plone-client/SKILL.md` |
+| `plone-client skill install` | `.claude/skills/plone-client/` |
+| `plone-client skill install --user` | `~/.claude/skills/plone-client/` |
+| `plone-client skill install --dir DIR` | `DIR/plone-client/` |
 
-The command replaces an older copy, and prints `installed`, with the path, and `replaced`.
-`plone-client skill show` prints the skill.
+The folder holds `SKILL.md`, which an agent reads first, and `references/blocks.md`, which it reads when it works with {term}`blocks <block>`.
+The command replaces an older copy, and prints `installed`, with the path of `SKILL.md`, and `replaced`.
+`plone-client skill show` prints `SKILL.md`, and `plone-client skill show references/blocks.md` prints the reference.
 
 ## Directories each agent reads
 
@@ -41,6 +42,12 @@ The command replaces an older copy, and prints `installed`, with the path, and `
 ## The skill
 
 ```{literalinclude} ../../src/plone_client/skill/SKILL.md
+:language: markdown
+```
+
+## The reference on blocks
+
+```{literalinclude} ../../src/plone_client/skill/references/blocks.md
 :language: markdown
 ```
 

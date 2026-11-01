@@ -173,6 +173,63 @@ plone-client --url http://localhost:8080/Plone -u admin request DELETE /about/@l
 }
 ```
 
+## A type is refused with `Disallowed subobject type`
+
+Applies to the library, the command line, and the MCP server.
+
+The site does not allow that type in that place.
+On a {term}`Volto` site, this usually means `Folder`, which exists but cannot be added.
+
+<!-- check: exit 4 -->
+```shell
+plone-client --url http://localhost:8080/Plone -u admin create / Folder --title Archive
+```
+
+```text
+{
+  "error": {
+    "status_code": 403,
+    "type": "Forbidden",
+    "message": "Disallowed subobject type: Folder",
+    "method": "POST",
+    "url": "http://localhost:8080/Plone/++api++"
+  }
+}
+```
+
+To make a section, such as `/news`, create a `Document` (a Page), which is {term}`folderish`.
+
+```shell
+plone-client --url http://localhost:8080/Plone -u admin create / Document --title Archive -f @type,id
+```
+
+```json
+{
+  "@type": "Document",
+  "id": "archive"
+}
+```
+
+A {term}`dry run` does not show this refusal, because the site never sees the request.
+To check first, list what a folder can hold.
+
+```shell
+plone-client --url http://localhost:8080/Plone -u admin types --addable-in /archive
+```
+
+```json
+[
+  "Event",
+  "File",
+  "Image",
+  "Link",
+  "News Item",
+  "Document"
+]
+```
+
+Assistants use the `content_types` tool, with `addable_in`, for the same list.
+
 ## A field does not change, and there is no error
 
 Applies to the library, the command line, and the MCP server.
