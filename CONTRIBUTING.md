@@ -58,6 +58,7 @@ Write one sentence per line.
 To add a page, give it the frontmatter of its neighbors, add it to the toctree and the card grid of its section's `index.md`, and link each Plone term to `docs/glossary.md` with `{term}` on its first use.
 
 A change that users can see updates the reference, one how-to guide, and the tutorial that covers it, if there is one.
+Read the Docs builds a preview of each pull request that changes the documentation, with `make docs-rtd`, and links it from the pull request's checks; the published documentation stays on GitHub Pages.
 
 Commands and transcripts are never typed by hand.
 A page runs between `<!-- check: start -->` and `<!-- check: stop -->` comments: its `shell` and `python` blocks run in order against a fresh site, and the `json`, `text` or `console` block after each is compared with what it printed.

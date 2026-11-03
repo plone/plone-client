@@ -1,0 +1,1 @@
+Added a Read the Docs configuration that builds a preview of the documentation for each pull request; the published documentation stays on GitHub Pages. @ericof

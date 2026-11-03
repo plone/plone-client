@@ -17,6 +17,8 @@ DOCS_DIR := docs
 DOCS_BUILDDIR := $(DOCS_DIR)/_build
 DOCS_SPHINXOPTS ?=
 DOCS_VALEOPTS ?=
+# Read the Docs sets it; a local run of docs-rtd writes here instead.
+READTHEDOCS_OUTPUT ?= $(DOCS_BUILDDIR)/rtd
 PAGE ?=
 DEMO ?=
 UPDATE ?=
@@ -94,6 +96,11 @@ test-integration: install ## Run the integration tests against Plone in Docker (
 docs: ## Build the documentation (warnings are errors)
 	@echo -e "$(GREEN)==> Build documentation$(RESET)"
 	@$(UV) run --all-extras --group docs sphinx-build -W --keep-going -b html $(DOCS_DIR) "$(DOCS_BUILDDIR)/html" $(DOCS_SPHINXOPTS)
+
+.PHONY: docs-rtd
+docs-rtd: ## Build the pull request preview on Read the Docs (same build as docs)
+	@echo -e "$(GREEN)==> Build documentation preview$(RESET)"
+	@$(UV) run --all-extras --group docs sphinx-build -W --keep-going -b html $(DOCS_DIR) "$(READTHEDOCS_OUTPUT)/html" $(DOCS_SPHINXOPTS)
 
 .PHONY: docs-livehtml
 docs-livehtml: ## Rebuild the documentation on changes, with live reload in the browser
