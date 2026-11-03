@@ -11,7 +11,7 @@
 [![PyPI - License](https://img.shields.io/pypi/l/plone-client)](https://pypi.org/project/plone-client/)
 [![CI](https://github.com/plone/plone-client/actions/workflows/ci.yml/badge.svg)](https://github.com/plone/plone-client/actions/workflows/ci.yml)
 
-**A Python library and command line client for Plone sites, built on plone.restapi.**
+**A Python library, command line client, and MCP for Plone sites, built on plone.restapi.**
 
 </div>
 
