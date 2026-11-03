@@ -20,6 +20,7 @@ from .exceptions import PloneConfigurationError
 from .exceptions import PloneConnectionError
 from .exceptions import PloneReadOnlyError
 from .exceptions import PloneTimeoutError
+from .exceptions import PloneTransitionError
 from .managers import AddonsManager
 from .managers import AliasesManager
 from .managers import BlockTypesManager
@@ -43,6 +44,7 @@ from .managers import UsersManager
 from .managers import VocabulariesManager
 from .managers import WorkflowManager
 from .managers import WorkingCopyManager
+from collections.abc import Iterable
 from collections.abc import Iterator
 from collections.abc import Mapping
 from contextlib import contextmanager
@@ -57,6 +59,7 @@ from urllib.parse import urlsplit
 import httpx
 import logging
 import os
+import re
 import ssl
 import time
 
@@ -78,6 +81,8 @@ IDEMPOTENT_METHODS = SAFE_METHODS | {"PUT", "DELETE"}
 RETRY_STATUSES = frozenset({429, 502, 503, 504})
 #: Services that answer a ``POST`` without changing the site.
 READ_ONLY_POSTS = ("@querystring-search", "@login", "@login-renew")
+#: A request that runs a workflow transition; the group is its id.
+TRANSITION_RE = re.compile(r"/@workflow/([^/]+)/?$")
 
 Params = Mapping[str, Any] | list[tuple[str, Any]] | None
 QueryPairs = list[tuple[str, str | int | float | bool | None]]
@@ -186,6 +191,9 @@ class PloneClient:
     :param backoff: Base delay in seconds between retries; doubles each time.
     :param headers: Extra headers sent with every request.
     :param read_only: Refuse every request that could change the site.
+    :param transitions: The only workflow transitions the client runs, such
+        as ``["submit"]``; others are refused before they are sent. Every
+        transition runs when it is ``None``.
     :param dry_run: Do not send requests that could change the site; log them
         and return a description of what would have been sent instead.
     :param frontend_url: URL of the Volto frontend, for services that Volto
@@ -214,6 +222,7 @@ class PloneClient:
         backoff: float = 0.5,
         headers: Mapping[str, str] | None = None,
         read_only: bool = False,
+        transitions: Iterable[str] | None = None,
         dry_run: bool = False,
         frontend_url: str = "",
         blocks: Mapping[str, Any] | None = None,
@@ -229,6 +238,8 @@ class PloneClient:
         self.retries = retries
         self.backoff = backoff
         self.read_only = read_only
+        #: The only workflow transitions the client runs; ``None`` for all.
+        self.transitions = None if transitions is None else frozenset(transitions)
         self.dry_run = dry_run
         #: Requests skipped because of ``dry_run``, oldest first.
         self.dry_run_log: list[dict[str, Any]] = []
@@ -464,6 +475,24 @@ class PloneClient:
             return False
         return not (method == "POST" and path.endswith(READ_ONLY_POSTS))
 
+    def _check_transition(self, method: str, path: str) -> None:
+        """Refuse a workflow transition that the client does not allow.
+
+        :param method: HTTP method, upper case.
+        :param path: Site path of the request.
+        :raises PloneTransitionError: If the request runs a transition that
+            ``transitions`` does not list.
+        """
+        if self.transitions is None or method != "POST":
+            return
+        match = TRANSITION_RE.search(path)
+        if match and match.group(1) not in self.transitions:
+            allowed = ", ".join(sorted(self.transitions)) or "none"
+            raise PloneTransitionError(
+                f"{method} {path} refused: the client allows only these "
+                f"transitions: {allowed}"
+            )
+
     def request(
         self,
         method: str,
@@ -495,6 +524,8 @@ class PloneClient:
         :returns: The response.
         :raises PloneReadOnlyError: If the client is read-only and the request
             could change the site.
+        :raises PloneTransitionError: If the request runs a workflow transition
+            that ``transitions`` does not list.
         :raises PloneAPIError: If the site answers with an error status.
         :raises PloneConnectionError: If the site cannot be reached.
         """
@@ -506,6 +537,7 @@ class PloneClient:
                 raise PloneReadOnlyError(
                     f"{method} {path} refused: the client is read-only"
                 )
+            self._check_transition(method, path)
             if self.dry_run:
                 return self._skip(method, url, params, json, content)
         request = self._http.build_request(

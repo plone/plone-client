@@ -219,7 +219,7 @@ plone-client --url http://localhost:8080/Plone -u admin -n create / Folder --tit
 ```json
 {
   "dry_run": true,
-  "warning": "The site would refuse this: Folder cannot be added in /. It can add: Event, File, Image, Link, News Item, Document."
+  "warning": "The site would refuse this: Folder cannot be added in /. It can add: Event, File, Image, Link, News Item, Document. The site would ignore fields that Folder does not have: blocks, blocks_layout."
 }
 ```
 

@@ -253,6 +253,25 @@ def test_config_keeps_the_blocks_setting(tmp_path):
     assert "blocks" not in loaded.get("blog").summary()
 
 
+def test_config_keeps_the_transitions(tmp_path):
+    path = tmp_path / "config.toml"
+    config = Config(path)
+    config.add(Profile(name="blog", url="https://example.org", transitions=["submit"]))
+    config.add(Profile(name="docs", url="https://example.org"))
+    config.save()
+    loaded = profiles.load_config(path)
+    assert loaded.get("blog").transitions == ["submit"]
+    assert loaded.get("blog").client_settings()["transitions"] == ["submit"]
+    assert "transitions" not in loaded.get("docs").summary()
+    assert "transitions" not in loaded.get("docs").client_settings()
+
+
+@pytest.mark.parametrize("value", ["submit", [""], [1]])
+def test_profile_rejects_bad_transitions(value):
+    with pytest.raises(PloneConfigurationError, match="transitions must be a list"):
+        Profile(name="blog", url="https://example.org", transitions=value)
+
+
 def test_load_missing_and_invalid(tmp_path):
     assert profiles.load_config(tmp_path / "missing.toml").profiles == {}
     broken = tmp_path / "broken.toml"
@@ -335,6 +354,14 @@ def test_settings_from_env_numbers(name):
 def test_settings_from_env_errors():
     with pytest.raises(PloneConfigurationError, match="Set PLONE_CLIENT_URL"):
         profiles.settings_from_env({})
+
+
+def test_settings_from_env_transitions():
+    settings = profiles.settings_from_env({
+        "PLONE_CLIENT_URL": "u",
+        "PLONE_CLIENT_TRANSITIONS": "submit, retract,",
+    })
+    assert settings["transitions"] == ["submit", "retract"]
 
 
 def test_settings_from_env_blocks():

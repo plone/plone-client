@@ -15,7 +15,7 @@ Results are JSON on standard output; errors are JSON on standard error with a me
 - Never create, change, or remove profiles unless the user asks; run `plone-client profile list` to see which exist.
 - Before changing a site other than a local one, run the command with `-n` (dry run) and show the user the requests it would send.
 - Never pass `--yes` to `delete`, `users delete`, or `groups delete` unless the user confirmed the exact items.
-- Exit code 7 means the profile is read-only. Do not work around it; tell the user.
+- Exit code 7 means the profile refused the change: it is read-only, or it does not allow that workflow transition. Do not work around it; tell the user.
 - A dry run shows the request, not the site's answer: apart from a `warning` on a refused type, a request that passes `-n` can still fail.
 - Use `-f` to keep only the keys you need, so the output stays small.
 - Read the `@id` of what a command creates: the site may change the id you asked for (`/blocks` became `/blocks-1`).
@@ -132,7 +132,7 @@ plone-client request POST /news/item/@lock -d '{}'
 | 4 | Not authenticated, not allowed, the item is locked, or the type cannot be added here |
 | 5 | Not found |
 | 6 | Invalid request or conflict, such as an id in use or an invalid field |
-| 7 | Refused by a read-only profile or `--read-only` |
+| 7 | Refused by a read-only profile, `--read-only`, or a transition the profile does not allow |
 | 8 | The site could not be reached |
 | 9 | Server error |
 

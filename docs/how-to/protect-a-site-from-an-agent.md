@@ -31,6 +31,7 @@ Rely on the first kind; treat the second as guidance.
 |---|---|---|---|
 | Plone permissions | Plone | On every request, on the site | The site; plone-client sends every request as the profile's user |
 | {term}`Read-only` profile or client | plone-client, in the client | Before the request is sent | `src/plone_client/client.py` `PloneClient.request` |
+| `transitions` of a profile or client | plone-client, in the client | Before the request is sent | `src/plone_client/client.py` `PloneClient._check_transition` |
 | `--tool` allowlist | The MCP server | When the server starts; a tool left out does not exist for the model | `src/plone_client/mcp_server.py` `build_server` |
 | {term}`Dry run` | Nothing: it is a preview mode | Changes are logged instead of sent, and reported as planned | `src/plone_client/client.py` `PloneClient.request` |
 | The {term}`skill`'s rules | Nothing: they are guidance the agent may follow | Whenever the agent reads them | `src/plone_client/skill/SKILL.md` |
@@ -105,6 +106,50 @@ With several sites and at least one that accepts changes, the server offers the 
 ```{important}
 `call_service` is offered in every mode, because it can read any service.
 It follows the same rules: on a read-only site, it refuses a request that would change something.
+```
+
+## Let it submit, not publish
+
+<!-- source: src/plone_client/client.py PloneClient._check_transition; src/plone_client/profiles.py Profile.transitions -->
+
+A profile with `transitions` runs only the workflow {term}`transitions <transition>` it lists, and refuses the others before they leave your computer.
+Give the assistant a profile that can submit an item for review, and keep publishing for a person.
+
+<!-- check: stdin admin -->
+```shell
+plone-client profile add review --url http://localhost:8080/Plone --username admin --transition submit
+```
+
+<!-- check: exit 7 -->
+```shell
+plone-client -p review workflow /news/release-party publish
+```
+
+```json
+{
+  "error": {
+    "type": "PloneTransitionError",
+    "message": "POST /news/release-party/@workflow/publish refused: the client allows only these transitions: submit"
+  }
+}
+```
+
+```shell
+plone-client -p review workflow /news/release-party submit -f review_state
+```
+
+```json
+{
+  "review_state": "pending"
+}
+```
+
+Repeat `--transition` to allow more, such as `retract`.
+The same list works in Python, as `PloneClient(..., transitions=["submit"])`, and in `PLONE_CLIENT_TRANSITIONS`.
+The MCP server shows it to the model in `list_sites`, and refuses the other transitions, also through `call_service`.
+
+```{versionadded} 1.0.0a5
+The `transitions` setting.
 ```
 
 ## Preview with a dry run

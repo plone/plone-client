@@ -11,6 +11,61 @@ from typing import Any
 from typing import Literal
 
 
+#: Keys a new item takes that are not fields of its type.
+ALWAYS_ACCEPTED = frozenset({"id", "UID"})
+
+
+def blocks_warning(data: Mapping[str, Any]) -> str | None:
+    """Say why the site would refuse the blocks of an item.
+
+    The site wants ``blocks`` as a mapping of block ids, each block with an
+    ``@type``, and ``blocks_layout.items`` listing those ids in order;
+    :func:`~plone_client.blocks.build` and
+    :func:`~plone_client.blocks.prepare` make both.
+
+    :param data: Field values of the item.
+    :returns: The warning, or ``None`` if there are no blocks or they are
+        well formed.
+    """
+    found = data.get("blocks")
+    if found is None:
+        return None
+    if not isinstance(found, Mapping):
+        return (
+            "The site would refuse this: blocks must be a mapping of block ids, "
+            "with their order in blocks_layout; make both with "
+            "plone_client.blocks.build or plone_client.blocks.prepare."
+        )
+    untyped = sorted(
+        key
+        for key, block in found.items()
+        if not isinstance(block, Mapping) or not block.get("@type")
+    )
+    if untyped:
+        return (
+            f"The site would refuse this: blocks without @type: {', '.join(untyped)}."
+        )
+    layout = data.get("blocks_layout")
+    items = layout.get("items") if isinstance(layout, Mapping) else None
+    if not isinstance(items, list) or set(items) != set(found):
+        return (
+            "Volto would not show these blocks as they are: blocks_layout.items "
+            "must list the ids in blocks, in order."
+        )
+    return None
+
+
+def _add_warnings(answer: dict[str, Any], warnings: Iterable[str | None]) -> None:
+    """Put the warnings of a dry run into its record, as one ``warning``.
+
+    :param answer: The record of the request.
+    :param warnings: Warnings; ``None`` stands for none.
+    """
+    found = [warning for warning in warnings if warning]
+    if found:
+        answer["warning"] = " ".join(found)
+
+
 def _sources(refs: str | Iterable[str]) -> list[str]:
     """Normalize one or more references for ``@copy`` and ``@move``.
 
@@ -158,7 +213,8 @@ class ContentManager(BaseManager):
             *Manage portal* permission).
         :param fields: More field values, merged over ``data``.
         :returns: The new item. In a dry run, the record of the request, with
-            a ``warning`` if the site would refuse the type in the folder.
+            a ``warning`` if the site would refuse the type in the folder,
+            refuse the blocks, or ignore fields the type does not have.
         :raises PloneBadRequestError: If the id is in use, or a field is invalid.
         :raises PloneForbiddenError: If the type is not allowed in the folder.
         """
@@ -166,9 +222,12 @@ class ContentManager(BaseManager):
         payload = {"@type": portal_type, **(data or {}), **fields}
         answer = self._client.post(path, payload)
         if self._client.dry_run:
-            warning = self._type_warning(path, portal_type)
-            if warning:
-                answer["warning"] = warning
+            warnings = [
+                self._type_warning(path, portal_type),
+                blocks_warning(payload),
+                self._fields_warning(portal_type, payload),
+            ]
+            _add_warnings(answer, warnings)
         return answer
 
     def _type_warning(self, path: str, portal_type: str) -> str | None:
@@ -194,6 +253,34 @@ class ContentManager(BaseManager):
             f"{path}. It can add: {', '.join(addable) or 'nothing'}."
         )
 
+    def _fields_warning(
+        self, portal_type: str, payload: Mapping[str, Any]
+    ) -> str | None:
+        """Say which fields of a dry run's new item the site would ignore.
+
+        :param portal_type: Content type.
+        :param payload: Field values.
+        :returns: The warning, or ``None`` if every field exists or the site
+            cannot say.
+        """
+        try:
+            schema = self._client.types.get(portal_type).get("properties", {})
+        except PloneClientError:
+            return None
+        unknown = sorted(
+            key
+            for key in payload
+            if key not in schema
+            and key not in ALWAYS_ACCEPTED
+            and not key.startswith("@")
+        )
+        if not unknown or not schema:
+            return None
+        return (
+            f"The site would ignore fields that {portal_type} does not have: "
+            f"{', '.join(unknown)}."
+        )
+
     def update(
         self,
         ref: str,
@@ -211,6 +298,8 @@ class ContentManager(BaseManager):
         :param representation: Ask the site to return the changed item.
         :param fields: More field values, merged over ``data``.
         :returns: The changed item, or ``None`` with ``representation=False``.
+            In a dry run, the record of the request, with a ``warning`` if
+            the site would refuse the blocks.
         """
         headers = {}
         if representation:
@@ -218,7 +307,10 @@ class ContentManager(BaseManager):
         if lock_token:
             headers["Lock-Token"] = lock_token
         payload = {**(data or {}), **fields}
-        return self._client.patch(self.resolve(ref), payload, headers=headers)
+        answer = self._client.patch(self.resolve(ref), payload, headers=headers)
+        if self._client.dry_run and isinstance(answer, dict):
+            _add_warnings(answer, [blocks_warning(payload)])
+        return answer
 
     def delete(self, ref: str) -> None:
         """Delete an item.

@@ -1,0 +1,1 @@
+`create_content_with_files` and `operations.create_with_files` now take `blocks` as a list, as the other tools do, instead of sending it to the site, which refused it. @ericof

@@ -57,6 +57,19 @@ def test_add_with_blocks_setting(invoke, memory_keyring, config_file):
     assert "Setting of block type codeBlock" in run.error["message"]
 
 
+def test_add_with_transitions(invoke, memory_keyring, config_file, site):
+    run = _add(invoke, "blog", "--transition", "submit", "--transition", "retract")
+    assert run.exit_code == 0, run.stderr
+    assert run.json["transitions"] == ["submit", "retract"]
+    run = invoke("workflow", "/news", "publish")
+    assert run.exit_code == 7
+    assert "allows only these transitions: retract, submit" in run.error["message"]
+    assert site.requests == []
+    run = invoke("workflow", "/news", "submit")
+    assert run.exit_code == 0, run.stderr
+    assert site.site_path(site.last) == "/news/@workflow/submit"
+
+
 def test_profile_is_used_for_requests(invoke, memory_keyring, site):
     _add(invoke)
     invoke("get", "/")

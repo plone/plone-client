@@ -185,6 +185,14 @@ def add(
     read_only: Annotated[
         bool, typer.Option(help="Refuse changes to this site.")
     ] = False,
+    transition: Annotated[
+        list[str] | None,
+        typer.Option(
+            help="The only workflow transition run on this site; repeat it to "
+            "allow more. Without it, every transition runs.",
+            show_default=False,
+        ),
+    ] = None,
     timeout: Annotated[
         float | None, typer.Option(help=TIMEOUT_HELP, show_default=False)
     ] = None,
@@ -233,6 +241,8 @@ def add(
     settings = _connection_settings(timeout, verify, retries, backoff)
     if read_only:
         settings["read_only"] = True
+    if transition:
+        settings["transitions"] = list(transition)
     if blocks_setting is not None:
         settings["blocks"] = parse_value(blocks_setting)
     profile = Profile(

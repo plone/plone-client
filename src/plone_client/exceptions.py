@@ -23,6 +23,14 @@ class PloneReadOnlyError(PloneClientError):
     """A request that changes the site was refused by a read-only client."""
 
 
+class PloneTransitionError(PloneReadOnlyError):
+    """A workflow transition was refused: the client allows only some.
+
+    It is a :class:`PloneReadOnlyError`, because the client refused the
+    request before sending it, and the site is unchanged.
+    """
+
+
 class PloneConnectionError(PloneClientError):
     """The site could not be reached."""
 

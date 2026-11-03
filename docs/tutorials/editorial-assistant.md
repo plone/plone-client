@@ -258,17 +258,21 @@ python ask.py "mcp --group editorial --dry-run" create_content_with_files '{"sit
     "GET http://localhost:8080/Plone/++api++/@types/News%20Item",
     "POST http://localhost:8080/Plone/++api++/news",
     "GET http://localhost:8080/Plone/++api++/news/@types",
+    "GET http://localhost:8080/Plone/++api++/@types/News%20Item",
     "POST http://localhost:8080/Plone/++api++/news/conference-announced",
     "GET http://localhost:8080/Plone/++api++/news/conference-announced/@types",
+    "GET http://localhost:8080/Plone/++api++/@types/Image",
     "POST http://localhost:8080/Plone/++api++/news/conference-announced",
     "GET http://localhost:8080/Plone/++api++/news/conference-announced/@types",
+    "GET http://localhost:8080/Plone/++api++/@types/Image",
     "PATCH http://localhost:8080/Plone/++api++/news/conference-announced"
   ]
 }
 ```
 
 This is the preview that the assistant shows you.
-Each entry in `created` has `planned`, and each request in the list is one that a real run would send.
+Each entry in `created` has `planned`, and each `POST` and `PATCH` in the list is one that a real run would send.
+The `GET` requests read the site to check the plan: whether `/news` can hold the type, and whether the type has the fields given; a problem would show up in a `warning`.
 The last request sets the {term}`lead image`, `preview_image_link`, and you did not have to know that.
 
 ## Try the site that is read-only
@@ -299,7 +303,7 @@ python ask.py "mcp --group editorial" create_content_with_files '{"site": "blog"
   "item": {
     "@id": "http://localhost:8080/Plone/news/conference-announced",
     "@type": "News Item",
-    "UID": "a6490fd303ee42bcae004b2558d9a23f",
+    "UID": "f326728738764807a940a8e5b6854378",
     "id": "conference-announced",
     "title": "Conference announced",
     "review_state": "private"
@@ -348,7 +352,7 @@ plone-client -p blog get /news/conference-announced -f review_state,preview_imag
   "preview_image_link": {
     "@id": "http://localhost:8080/Plone/news/conference-announced/lead.png",
     "@type": "Image",
-    "UID": "2b55b9e8f3c24f99bfca2107f6e366ac",
+    "UID": "ce561963a3b44ac0bcde9a36a71b1c65",
     "description": "",
     "effective": "1969-12-31T00:00:00+00:00",
     "end": null,
@@ -360,17 +364,17 @@ plone-client -p blog get /news/conference-announced -f review_state,preview_imag
       "image": [
         {
           "content-type": "image/png",
-          "download": "@@images/image-64-fded1ec5b75f3c439d9d92899c22571c.png",
+          "download": "@@images/image-64-2a4bfece57893beaf9eb6ac9f01ee4be.png",
           "filename": "lead.png",
           "height": 64,
           "scales": {
             "icon": {
-              "download": "@@images/image-32-9a5017baf58da7ab7ef884f77b941157.png",
+              "download": "@@images/image-32-be54f35f6505e07939e8f8198b381147.png",
               "height": 32,
               "width": 32
             },
             "tile": {
-              "download": "@@images/image-64-fded1ec5b75f3c439d9d92899c22571c.png",
+              "download": "@@images/image-64-2a4bfece57893beaf9eb6ac9f01ee4be.png",
               "height": 64,
               "width": 64
             }
@@ -476,6 +480,7 @@ The first create attempt failed. ... I ran publish, as you asked, not submit.
 Two things to notice.
 The model knew that saying "yes" changes nothing while the server is in a dry run.
 And the dry run accepted a `blocks` list that the site then refused, so a preview shows the requests, not whether the site accepts them.
+Since 1.0.0a5, `create_content_with_files` takes blocks as a list, and a dry run warns about blocks the site would refuse.
 `````
 
 ## Next steps
