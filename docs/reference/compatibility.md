@@ -30,6 +30,7 @@ What a site supports depends on the `plone.restapi` version it runs, not on plon
 
 {bdg-success}`Tested`
 : The integration test suite runs against the `plone/plone-backend` image of this release.
+  The pages of this documentation run only on Plone 6.1 and 6.2, as {ref}`reference-compatibility-examples` explains.
 
 {bdg-success}`Supported`
 : Every service plone-client uses is available.
@@ -56,6 +57,8 @@ On an older site, the methods below raise {class}`~plone_client.exceptions.Plone
 | `@inherit` | 9.13.0 | {meth}`client.navigation.inherit() <plone_client.managers.navigation.NavigationManager.inherit>` |
 
 Logging in with `POST @login` works on every supported version.
+
+(reference-compatibility-examples)=
 
 ## Examples in this documentation
 

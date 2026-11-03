@@ -34,6 +34,13 @@ jobs:
           PLONE_IMAGE: ${{ matrix.image }}
         run: make docs-check
 
+      # Runs even when a page failed, so one run reports both.
+      - name: Check the service examples
+        if: ${{ !cancelled() }}
+        env:
+          PLONE_IMAGE: ${{ matrix.image }}
+        run: make docs-services-check
+
   demo:
     name: "demo.plone.org"
     runs-on: ubuntu-latest

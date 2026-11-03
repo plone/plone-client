@@ -148,6 +148,30 @@ With a {term}`profile`, replace the URL with `PloneClient.from_profile("producti
 :::{tab-item} Command line
 :sync: terminal
 
+Preview publishing a folder and everything in it, on the public demo site.
+With `-n`, the command prints the request it would send, and sends nothing.
+
+<!-- check: start -->
+<!-- check: demo -->
+```shell
+uvx --from "plone-client[cli]" plone-client --url https://demo.plone.org -n workflow /content-types publish --recursive
+```
+
+```json
+{
+  "dry_run": true,
+  "method": "POST",
+  "url": "https://demo.plone.org/++api++/content-types/@workflow/publish",
+  "json": {
+    "include_children": true
+  }
+}
+```
+
+<!-- check: stop -->
+
+On your own site, name its {term}`profile` instead of the URL.
+
 ```shell
 plone-client -n -p production workflow /news publish --recursive
 ```
