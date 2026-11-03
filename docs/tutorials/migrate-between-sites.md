@@ -32,6 +32,7 @@ docker compose up --wait
 ```
 
 Open `http://localhost:3000` to see it, with the user `admin` and the password `admin`.
+These credentials belong to the throwaway {term}`Compose site`; never reuse them on a real site.
 {ref}`howto-run-a-site` explains what it has.
 
 ## Prepare the source
@@ -327,6 +328,8 @@ Give each site a {term}`profile`, and use `PloneClient.from_profile("source", re
 ```shell
 docker compose down -v
 ```
+
+If a step failed, `docker compose down -v` still resets the site; then start again from the top.
 
 <!-- check: stop -->
 

@@ -60,6 +60,7 @@ A URL outside the site raises {class}`ValueError`.
 
 ## Block types
 
+<!-- source: plone/volto#8023, packages/volto/CHANGELOG.md under "19.6.0 (2026-10-27)" -->
 `client.block_types` asks the `@blocks-schema` service of Volto 19.6.0 and later, which lists the blocks a site offers with their documentation, data schema, and variations.
 Volto serves it, not `plone.restapi`, so the request goes to the client's `frontend_url`, without `++api++`, and with a Bearer token.
 A client that uses basic authentication gets the token from `@login`, and logs in again when the service refuses an expired token.

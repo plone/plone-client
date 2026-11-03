@@ -83,6 +83,8 @@ The JSON entry below is the same for most clients; only the file and, in places,
 :::{tab-item} Claude Code
 :sync: claude-code
 
+<!-- source: https://code.claude.com/docs/en/mcp, read on 2026-10-31 -->
+
 Add the server to the current project.
 
 ```shell
@@ -95,11 +97,15 @@ Pass `--scope user` to make it available in every project, or `--scope project` 
 :::{tab-item} Claude Desktop
 :sync: claude-desktop
 
+<!-- source: https://modelcontextprotocol.io/docs/develop/connect-local-servers, read on 2026-10-31 -->
+
 {ref}`howto-claude-desktop` goes through every step, from the installation to the first question.
 :::
 
 :::{tab-item} Cursor
 :sync: cursor
+
+<!-- source: https://cursor.com/docs/context/mcp, read on 2026-10-31 -->
 
 Add the server to `.cursor/mcp.json` in the project, or to `~/.cursor/mcp.json` for every project.
 
@@ -118,6 +124,8 @@ Add the server to `.cursor/mcp.json` in the project, or to `~/.cursor/mcp.json` 
 
 :::{tab-item} VS Code
 :sync: copilot
+
+<!-- source: https://code.visualstudio.com/docs/agents/reference/mcp-configuration, read on 2026-10-31 -->
 
 Add the server to `.vscode/mcp.json` in the project.
 The top-level key is `servers`, not `mcpServers`.
@@ -138,6 +146,8 @@ The top-level key is `servers`, not `mcpServers`.
 :::{tab-item} Codex
 :sync: codex
 
+<!-- source: https://learn.chatgpt.com/docs/extend/mcp.md?surface=cli, read on 2026-10-31 -->
+
 Add the server with the command.
 
 ```shell
@@ -156,6 +166,8 @@ args = ["mcp", "--profile", "blog"]
 :::{tab-item} Gemini CLI
 :sync: google
 
+<!-- source: https://geminicli.com/docs/tools/mcp-server, read on 2026-10-31 -->
+
 Add the server to `.gemini/settings.json` in the project, or to `~/.gemini/settings.json` for every project.
 
 ```json
@@ -172,6 +184,8 @@ Add the server to `.gemini/settings.json` in the project, or to `~/.gemini/setti
 
 :::{tab-item} Other clients
 :sync: other
+
+<!-- source: the mcpServers shape shared by Claude Desktop, Cursor, Gemini CLI, and Claude Code's .mcp.json, per the sources of those tabs, read on 2026-10-31 -->
 
 Most clients read this shape, under some name, from an `mcp.json` file.
 
@@ -304,6 +318,8 @@ Keep the token out of files that you commit: each client below has its own way.
 :::{tab-item} Claude Code
 :sync: claude-code
 
+<!-- source: https://code.claude.com/docs/en/mcp, read on 2026-10-31 -->
+
 <!-- check: skip -->
 ```shell
 claude mcp add --transport http plone-blog http://127.0.0.1:8000/mcp --header "Authorization: Bearer $TOKEN"
@@ -312,6 +328,8 @@ claude mcp add --transport http plone-blog http://127.0.0.1:8000/mcp --header "A
 
 :::{tab-item} Cursor
 :sync: cursor
+
+<!-- source: https://cursor.com/docs/context/mcp, read on 2026-10-31 -->
 
 Cursor reads the token from an environment variable.
 
@@ -332,6 +350,8 @@ Cursor reads the token from an environment variable.
 
 :::{tab-item} VS Code
 :sync: copilot
+
+<!-- source: https://code.visualstudio.com/docs/agents/reference/mcp-configuration, read on 2026-10-31 -->
 
 VS Code asks for the token once, and stores it.
 
@@ -362,6 +382,8 @@ VS Code asks for the token once, and stores it.
 :::{tab-item} Codex
 :sync: codex
 
+<!-- source: https://learn.chatgpt.com/docs/extend/mcp.md?surface=cli, read on 2026-10-31 -->
+
 `bearer_token_env_var` names the environment variable that holds the token.
 
 <!-- check: skip -->
@@ -374,6 +396,8 @@ bearer_token_env_var = "PLONE_MCP_TOKEN"
 
 :::{tab-item} Gemini CLI
 :sync: google
+
+<!-- source: https://geminicli.com/docs/tools/mcp-server, read on 2026-10-31 -->
 
 <!-- check: skip -->
 ```shell

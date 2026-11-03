@@ -41,6 +41,10 @@ With both, read-only wins: `-n` on a read-only {term}`profile` is refused with e
 A dry run shows the request, not the site's answer to it, so a request that looks fine can still fail in the real run.
 The exception is a new item: if the site cannot add its type in that folder, the dry run says so in `warning`, and still exits with code 0.
 
+```{versionadded} 1.0.0a4
+The `warning` of a dry run on a type that the folder refuses.
+```
+
 The same change, with each switch:
 
 ```shell

@@ -347,6 +347,9 @@ PLONE_CLIENT_FRONTEND_URL=http://localhost:3000 PLONE_CLIENT_URL=http://localhos
 
 <!-- check: stop -->
 
+When the warning says that `@blocks-schema` needs an authenticated user, the site has the service, and the profile reads it anonymously.
+Use a profile that logs in.
+
 ## A certificate is refused
 
 Applies to the library, the command line, and the MCP server.
@@ -417,6 +420,13 @@ Applies to everything that uses `demo.plone.org`.
 
 The {term}`demo site` is shared with other visitors, and resets every night, so its content does not always match these pages.
 Use your own {term}`Compose site` for anything that must stay the same; see {ref}`howto-run-a-site`.
+
+## A tutorial failed half way
+
+Applies to every tutorial.
+
+A step that fails leaves the {term}`Compose site` and your {term}`profiles <profile>` in between two states, and the next steps may no longer match the page.
+Reset the site with `docker compose down -v`, remove each profile the tutorial created with `plone-client profile remove NAME`, and start the tutorial again from its first section.
 
 ## Related
 

@@ -17,7 +17,6 @@ At the end of this path, you will have your sites registered as {term}`profiles 
 This command searches [`demo.plone.org`](https://demo.plone.org), a public site that resets every night, without logging in.
 
 <!-- check: start -->
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 ```shell
 uvx --from "plone-client[cli]" plone-client --url https://demo.plone.org search -q Plone --limit 3 -f title,@type
@@ -50,6 +49,10 @@ uvx --from "plone-client[cli]" plone-client --url https://demo.plone.org search 
 
 {ref}`howto-troubleshoot` goes from the symptom to the fix.
 
-## Keep the site safe
+## Before you connect a real site
 
-Add `--read-only` to the profile of a production site, and add `-n` to a command to see what it would send; see {ref}`howto-preview-changes`.
+- Log in as a dedicated Plone user with only the permissions you need, not `admin`.
+- Add the site first as a read-only {term}`profile`, with `--read-only`.
+- Add `-n` to the first command that writes, and read what it would send; see {ref}`howto-preview-changes`.
+- Keep the password in the {term}`keyring`, or use `--secret env` or `--secret command` where there is none; see {ref}`howto-scripts-ci`.
+- In scripts, check the {term}`exit code` of each command, and pass `--yes` only to commands you have run by hand first.

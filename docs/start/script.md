@@ -17,7 +17,6 @@ At the end of this path, you will have a Python script that keeps content on a {
 This script reads [`demo.plone.org`](https://demo.plone.org), a public site that resets every night, without logging in.
 
 <!-- check: start -->
-<!-- demo-site: provisional -->
 <!-- check: file demo.py -->
 ```python
 from plone_client import PloneClient
@@ -52,6 +51,8 @@ uv run --with plone-client demo.py
 ## Going further
 
 - {ref}`reference-services` has an example for every service.
+- {ref}`reference-blocks` builds the blocks of a page in Python.
+- {ref}`reference-exceptions` lists the exception for each kind of failure.
 - {ref}`howto-large-sites` keeps scripts fast on large sites.
 - {ref}`explanation-direct-api` says when to step outside the {term}`managers <manager>`.
 
@@ -59,6 +60,10 @@ uv run --with plone-client demo.py
 
 {ref}`howto-troubleshoot` goes from the symptom to the fix.
 
-## Keep the site safe
+## Before you connect a real site
 
-Use `read_only=True` while you explore, and `dry_run=True` before you change a site you care about; see {ref}`howto-preview-changes`.
+- Log in as a dedicated Plone user with only the permissions the script needs, not `admin`.
+- Start with `read_only=True`, which refuses every change before sending it.
+- Pass `dry_run=True` on the first run that writes, and read `client.dry_run_log`; see {ref}`howto-preview-changes`.
+- Keep the password out of the script: use a {term}`profile`, or an environment variable with {meth}`~plone_client.PloneClient.from_env`; see {ref}`howto-scripts-ci`.
+- Catch the exceptions of {ref}`reference-exceptions`, so that a refused change stops the script instead of half-applying it.

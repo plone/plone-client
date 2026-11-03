@@ -48,7 +48,6 @@ for item in client.search.iter(portal_type="Document", limit=3):
 
 Run it.
 
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 ```shell
 uv run python demo.py
@@ -76,6 +75,7 @@ docker compose up --wait
 ```
 
 Open `http://localhost:3000` to see it in {term}`Volto`, its web interface, with the user `admin` and the password `admin`.
+These credentials belong to the throwaway {term}`Compose site`; never reuse them on a real site.
 The site has sample content; {ref}`howto-run-a-site` lists it.
 The API of the same site is at `http://localhost:8080/Plone`.
 
@@ -403,6 +403,8 @@ Stop the site and throw its content away.
 ```shell
 docker compose down -v
 ```
+
+If a step failed, `docker compose down -v` still resets the site, and `plone-client profile remove tutorial` removes the profile you added; then start again from the top.
 
 <!-- check: stop -->
 

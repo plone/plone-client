@@ -28,6 +28,7 @@ docker compose up --wait
 
 `--wait` returns when the site answers, usually in less than a minute.
 Open `http://localhost:3000` to see the site, and log in with the user `admin` and the password `admin`.
+These credentials belong to the throwaway {term}`Compose site`; never reuse them on a real site.
 
 To work on a copy of this repository, use the file at its root, which is the same one.
 
@@ -107,6 +108,8 @@ Remove the containers and their data, and start again.
 docker compose down -v
 docker compose up --wait
 ```
+
+This also recovers from a tutorial that failed half way; remove the profiles it created with `plone-client profile remove NAME`.
 
 ## How the checks use it
 

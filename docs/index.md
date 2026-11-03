@@ -13,13 +13,18 @@ One client to automate Plone, whether the operator is a developer, a shell scrip
 
 plone-client is a Python library, a command line, and an {term}`MCP` server for [Plone](https://plone.org) sites, built on [`plone.restapi`](https://6.docs.plone.org/plone.restapi/docs/source/index.html).
 
+```{admonition} Alpha
+:class: warning
+plone-client is in alpha: its Python API and its commands can change before 1.0.
+Read the {doc}`changelog` before you upgrade.
+```
+
 ## Try it now
 
 You need only [uv](https://docs.astral.sh/uv/).
 This command lists the top of [`demo.plone.org`](https://demo.plone.org), a public site that anyone can use and that resets every night.
 
 <!-- check: start -->
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 ```shell
 uvx --from "plone-client[cli]" plone-client --url https://demo.plone.org ls / -f title,review_state
@@ -85,29 +90,25 @@ New to Plone?
 ## Install
 
 ::::{tab-set}
-:sync-group: door
+:sync-group: installer
 
-:::{tab-item} Python library
-:sync: python
+:::{tab-item} uv
+:sync: uv
 
 ```shell
-uv add plone-client
+uv add plone-client                            # Python library
+uv tool install "plone-client[cli]"            # command line
+uv tool install "plone-client[mcp,markdown]"   # assistants
 ```
 :::
 
-:::{tab-item} Command line
-:sync: terminal
+:::{tab-item} pip and pipx
+:sync: pip
 
 ```shell
-uv tool install "plone-client[cli]"
-```
-:::
-
-:::{tab-item} Assistants
-:sync: agents
-
-```shell
-uv tool install "plone-client[mcp,markdown]"
+pip install plone-client                       # Python library
+pipx install "plone-client[cli]"               # command line
+pipx install "plone-client[mcp,markdown]"      # assistants
 ```
 :::
 ::::
@@ -122,13 +123,26 @@ plone-client needs Python 3.11 or later, and the `markdown` extra needs 3.12; se
 :::{tab-item} Python library
 :sync: python
 
+Save this as `demo.py`; it reads the public demo site without logging in.
+
+<!-- check: start -->
+<!-- check: file demo.py -->
 ```python
 from plone_client import PloneClient
 
-with PloneClient.from_profile("production") as client:
-    for item in client.search.iter("/news", portal_type="News Item", review_state="published"):
-        print(item["@id"], item["title"])
+with PloneClient("https://demo.plone.org") as site:
+    for item in site.search.iter(portal_type="Document", limit=3):
+        print(item["title"])
 ```
+
+<!-- check: demo -->
+```shell
+uv run --with plone-client demo.py
+```
+
+<!-- check: stop -->
+
+With a {term}`profile`, replace the URL with `PloneClient.from_profile("production")`.
 :::
 
 :::{tab-item} Command line
@@ -143,6 +157,7 @@ plone-client -n -p production workflow /news publish --recursive
 :sync: agents
 
 Add a site as a {term}`profile`, and give your assistant this server.
+This is the `mcpServers` shape that Claude Desktop, Cursor, and most clients read; VS Code names the key `servers`, as {ref}`howto-assistant` shows.
 
 ```json
 {
@@ -161,11 +176,11 @@ Then ask it: "Which news items on the site are still private?"
 
 ## Safe by design
 
-- **Secrets stay out of files.** A {term}`profile` keeps its password in the {term}`keyring` of your operating system.
+- **Secrets stay out of files.** A {term}`profile` keeps its password in the {term}`keyring` of your operating system, or reads it from the environment or a command where there is no keyring; see {ref}`howto-scripts-ci`.
 - **Read-only sites stay read-only.** A profile or a client can refuse every change before sending it.
 - **Dry runs show the plan.** `-n` and `dry_run=True` print the requests and send none of them.
 - **Destructive commands ask first.** Without a terminal, they need `--yes`.
-- **Failures have names.** Each kind of failure has its own exception and {term}`exit code`.
+- **Failures have names.** Each kind of failure has its own exception and {term}`exit code`, listed in {ref}`reference-exceptions`.
 - **Plone has the last word.** Every request runs with the permissions of the user you logged in as.
 
 {doc}`how-to/protect-a-site-from-an-agent` puts these together for assistants.

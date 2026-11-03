@@ -26,11 +26,12 @@ The examples run against the {term}`Compose site`, whose sample content {ref}`ho
 plone-client profile add local --url http://localhost:8080/Plone --username admin --frontend-url http://localhost:3000 --use
 ```
 
+The password is `admin`, which belongs to the throwaway {term}`Compose site`; never reuse it on a real site.
 If a command fails, look for its error in {ref}`howto-troubleshoot`.
 
 ## Audit unpublished content
 
-**Goal:** list what visitors cannot see yet.
+**Goal:** list what visitors cannot see yet. *Reads the site.*
 
 **Prerequisites:** a profile with a user who can see private items.
 
@@ -78,7 +79,7 @@ plone-client search --state private -t "News Item" --count
 
 ## Find stale content
 
-**Goal:** list items that nobody changed after a date.
+**Goal:** list items that nobody changed after a date. *Reads the site.*
 
 **Prerequisites:** none.
 
@@ -109,7 +110,7 @@ Raise `--limit`, which is 50 by default.
 
 ## Publish in bulk
 
-**Goal:** publish the private items whose title starts with `Release`.
+**Goal:** publish the private items whose title starts with `Release`. *Changes the site.*
 
 **Prerequisites:** a user who can publish.
 
@@ -155,7 +156,7 @@ To publish a folder and everything inside it, use `workflow /news publish --recu
 
 ## Move a subtree and keep its old address
 
-**Goal:** archive an item without breaking links to it.
+**Goal:** archive an item without breaking links to it. *Changes the site.*
 
 **Prerequisites:** a folder to move into.
 
@@ -181,30 +182,24 @@ Plone redirects the old path by itself.
 Add another alias if the item was known under a different address.
 
 ```shell
-plone-client aliases add /archive/old-announcement /old-news -c
+plone-client aliases add /archive/old-announcement /old-news | jq -c '[.items[].path]'
 ```
 
 ```json
-{"@id": "http://localhost:8080/Plone/archive/old-announcement/@aliases", "items": [{"path": "/news/old-announcement"}, {"path": "/old-news"}], "items_total": 2}
+["/news/old-announcement","/old-news"]
 ```
 
 **Verify:** list the aliases of the item in its new place.
 
 ```shell
-plone-client aliases list /archive/old-announcement -f items
+plone-client aliases list /archive/old-announcement | jq '[.items[].path]'
 ```
 
 ```json
-{
-  "items": [
-    {
-      "path": "/news/old-announcement"
-    },
-    {
-      "path": "/old-news"
-    }
-  ]
-}
+[
+  "/news/old-announcement",
+  "/old-news"
+]
 ```
 
 **Adapt:** `move` takes several items, and a folder moves with everything inside it.
@@ -212,9 +207,10 @@ plone-client aliases list /archive/old-announcement -f items
 
 ## Reorder a folder
 
-**Goal:** put an item first in its folder, which is the order `ls` and menus show.
+**Goal:** put an item first in its folder, which is the order `ls` and menus show. *Changes the site.*
 
 **Prerequisites:** none.
+The output assumes the previous recipe ran: it moved one item out of `/news`, so four are left.
 
 ```shell
 plone-client order /news sprint-report top
@@ -243,7 +239,7 @@ plone-client ls /news -f title -c
 
 ## Add users from a CSV file
 
-**Goal:** create accounts from a list, and put them in a group.
+**Goal:** create accounts from a list, and put them in a group. *Changes the site.*
 
 **Prerequisites:** a CSV file without a header line.
 
@@ -298,7 +294,7 @@ Give a group access to one folder with {ref}`howto-users-sharing`.
 
 ## Compare a registry record across sites
 
-**Goal:** read one setting on every site you manage.
+**Goal:** read one setting on every site you manage, and change it on one. *Changes the site.*
 
 **Prerequisites:** a profile per site.
 
@@ -357,9 +353,10 @@ plone-client -p production registry set plone.site_title '"Sample site"'
 
 ## Call a service without a command
 
-**Goal:** use a `plone.restapi` service or an add-on service that has no command.
+**Goal:** use a `plone.restapi` service or an add-on service that has no command. *Changes the site.*
 
 **Prerequisites:** the service's path, from its documentation.
+The site title in the output is the one the previous recipe set.
 
 ```shell
 plone-client request GET /@site -f @id,plone.site_title
@@ -394,9 +391,10 @@ plone-client request DELETE /news/release-6-2/@lock -f locked
 
 ## Export metadata to CSV
 
-**Goal:** give someone a spreadsheet of the content.
+**Goal:** give someone a spreadsheet of the content. *Reads the site.*
 
 **Prerequisites:** none.
+The states in the output assume the earlier recipes ran, which published the items whose title starts with `Release`.
 
 `-m` asks the catalog for extra columns, and `jq` turns each result into a line.
 

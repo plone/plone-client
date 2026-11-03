@@ -36,10 +36,13 @@ Where your model runs decides what to set up.
 | What limits it | The {term}`profile`, and the agent's own permissions | The profile, and the tools you offer with `--tool` |
 | Pick it when | The agent already has a terminal | There is no terminal, or the agent must not run arbitrary commands |
 
+`call_service` is offered in every mode, read-only included, because it reaches every service the user can use; none of the tool sets this documentation recommends includes it.
+
 {ref}`explanation-interfaces` explains the difference at length.
 
 ## You need
 
+- Python 3.12 or later, for the `markdown` extra that turns Markdown into pages.
 - [uv](https://docs.astral.sh/uv/).
 - [Docker](https://www.docker.com/), for the local site that the tutorials change.
 - An assistant or a coding agent.
@@ -62,6 +65,10 @@ Where your model runs decides what to set up.
 
 {ref}`howto-troubleshoot` goes from the symptom to the fix.
 
-## Keep the site safe
+## Before you connect a real site
 
-Start with a read-only {term}`profile`, and read {ref}`howto-protect` before you give a model write access.
+- Log in as a dedicated Plone user with only the permissions the model needs, not `admin`.
+- Add the site first as a read-only {term}`profile`, with `--read-only`.
+- Start the server with `--dry-run` for the first session that writes, and read the planned requests; see {ref}`howto-preview-changes`.
+- Keep the password in the {term}`keyring`, or use `--secret env` or `--secret command` where there is none; see {ref}`howto-scripts-ci`.
+- Offer only the tools the job needs with `--tool`, and read {ref}`howto-protect` before you give a model write access.

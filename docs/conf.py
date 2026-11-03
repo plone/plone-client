@@ -42,7 +42,6 @@ extensions = [
 exclude_patterns = [
     "_build",
     "_checks",
-    "_examples",
     "_generate",
     "_generated",
     "_styles",
@@ -142,7 +141,9 @@ html_title = f"{project} {release}"
 html_extra_path = ["robots.txt"]
 html_static_path = ["_static"]
 
-html_baseurl = "https://plone.github.io/plone-client"
+# The trailing slash matters: sphinxext.opengraph joins page URLs to it with
+# urljoin, which drops the last path segment of a base without one.
+html_baseurl = "https://plone.github.io/plone-client/"
 sitemap_url_scheme = "{link}"
 sitemap_filename = "sitemap-custom.xml"
 

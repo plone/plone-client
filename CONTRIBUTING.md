@@ -66,6 +66,11 @@ The docstring of `docs/_checks/run.py` lists every mark, and `make docs-check PA
 `docs/_checks/seed.py` is the only source of sample content.
 Tables of commands, tools and resources come from the code, through `docs/_generate/`, into `docs/_generated/`, so run `make docs-generate` after changing them.
 
+Every pull request and push to `main` builds the documentation, checks links and Vale errors, and runs `docs-generate-check`, `docs-check` and `docs-services-check` on Plone 6.1; the build job takes about 13 minutes.
+Once a week, `docs-check.yml` runs the pages on Plone 6.1 and 6.2, and the pages that read `demo.plone.org`, whose outages fail nothing.
+Plone 6.0 answers with other fields, so its pages would never match; the integration tests cover it instead.
+Blocks marked `demo` count only their exit code, so compare their transcripts by hand when the demo site changes.
+
 Docstrings use reStructuredText field lists: `:param:`, `:returns:` and `:raises:`.
 
 ## Changelog
