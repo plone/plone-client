@@ -11,7 +11,7 @@
 [![PyPI - License](https://img.shields.io/pypi/l/plone-client)](https://pypi.org/project/plone-client/)
 [![CI](https://github.com/plone/plone-client/actions/workflows/ci.yml/badge.svg)](https://github.com/plone/plone-client/actions/workflows/ci.yml)
 
-**A Python library and command line client for Plone sites, built on plone.restapi.**
+**A Python library, command line client, and MCP for Plone sites, built on plone.restapi.**
 
 </div>
 
@@ -25,6 +25,15 @@
 
 It works with Plone 6.0, 6.1, and 6.2, and needs Python 3.11 or later.
 See the [compatibility grid](https://plone.github.io/plone-client/reference/compatibility.html) for the `plone.restapi` versions.
+
+## Where to start
+
+Pick the path that matches how you work: [script Plone from Python](https://plone.github.io/plone-client/start/script.html), [manage sites from a terminal](https://plone.github.io/plone-client/start/cli.html), or [work with AI assistants](https://plone.github.io/plone-client/start/agents.html).
+To try it without installing anything but [uv](https://docs.astral.sh/uv/), list the top of the public demo site:
+
+```shell
+uvx --from "plone-client[cli]" plone-client --url https://demo.plone.org ls / -f title,review_state
+```
 
 ## Install
 

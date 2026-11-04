@@ -63,19 +63,23 @@ The {doc}`/glossary` defines every other term.
 
 | You want to | Library | Command line | MCP server |
 |---|---|---|---|
-| Read, search, and list content | Yes | Yes | Yes |
-| Create, change, move, copy, and delete content | Yes | Yes | Yes |
-| Run workflow transitions | Yes | Yes | Yes |
-| Create a page from Markdown or HTML | Yes | Yes | Yes |
-| Create an item with files and a lead image | Yes | Yes | Yes |
-| Upload a folder of documents | Yes | Yes | Yes |
-| Edit single blocks of a page | Yes, with {mod}`plone_client.blocks` | With `update` | Yes |
-| List the block types of a site | Yes | Yes | Yes |
-| Manage users and groups | Yes | Yes | With `call_service` |
-| Change the registry and control panels | Yes | Registry; the rest with `request` | With `call_service` |
-| Call any other service | Yes | With `request` | With `call_service` |
+| {ref}`Read, search, and list content <reference-service-search>` | Yes | Yes | Yes |
+| {ref}`Create, change, move, copy, and delete content <reference-service-content>` | Yes | Yes | Yes |
+| {ref}`Run workflow transitions <reference-service-workflow>` | Yes | Yes | Yes |
+| {ref}`Create a page from Markdown or HTML <reference-blocks>` | Yes | Yes | Yes |
+| {ref}`Create an item with files and a lead image <reference-service-files>` | Yes | Yes | Yes |
+| {ref}`Upload a folder of documents <reference-service-files>` | Yes | Yes | Yes |
+| {ref}`Edit single blocks of a page <reference-blocks>` | Yes, with {mod}`plone_client.blocks` | With `update` | Yes |
+| {ref}`List the block types of a site <reference-blocks>` | Yes | Yes | Yes |
+| {ref}`Manage users and groups <reference-service-people>` | Yes | Yes | With `call_service` |
+| {ref}`Change the registry and control panels <reference-service-site>` | Yes | Registry; the rest with `request` | With `call_service` |
+| {ref}`Call any other service <reference-services>` | Yes | With `request` | With `call_service` |
 | Use several sites at once | One client per site | One profile per command | One server |
-| Refuse changes, or preview them | Yes | Yes | Yes |
+| {ref}`Refuse changes, or preview them <howto-preview-changes>` | Yes | Yes | Yes |
+
+*Yes* means a dedicated method, command, or {term}`tool <tool>`.
+*With `request`* and *with `call_service`* mean the generic request: it reaches the same service with the same permissions, but you write the path and the body yourself.
+Every cell is bounded by the permissions of the Plone user you log in as, and by the `plone.restapi` version of the site; see {ref}`reference-compatibility`.
 
 ## Two sites you can use
 

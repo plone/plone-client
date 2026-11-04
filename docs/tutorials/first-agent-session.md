@@ -38,6 +38,7 @@ docker compose up --wait
 
 Open `http://localhost:3000` to see the site.
 The user is `admin`, and the password is `admin`.
+These credentials belong to the throwaway {term}`Compose site`; never reuse them on a real site.
 
 ## Install plone-client
 
@@ -100,6 +101,8 @@ plone-client skill install
 
 Notice where it went: `.claude/skills` is where Claude Code looks.
 {ref}`howto-agents` names the folder for other agents.
+
+The skill tells the agent the rules, and enforces none of them; the read-only `production` profile does, as {ref}`howto-protect-enforcement` shows.
 
 The skill knows the command line, not your sites.
 Add what only you know to `AGENTS.md`, which agents read when they open the project.
@@ -262,6 +265,7 @@ plone-client -p production workflow /news/release-party publish
 }
 ```
 
+The client refused it, before sending any request, because the profile is read-only.
 The command exits with code 7, and the skill tells the agent to stop there and tell you, not to work around it.
 Reads still work.
 
@@ -395,6 +399,8 @@ docker compose down -v
 plone-client profile remove local
 plone-client profile remove production
 ```
+
+If a step failed, the same commands reset everything, and you can start again from the top.
 
 ## Next steps
 

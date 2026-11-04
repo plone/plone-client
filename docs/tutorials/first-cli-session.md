@@ -35,7 +35,6 @@ It is shared with other visitors and resets every night, so what you see may dif
 A profile gives a site a name.
 Add one for the demo site, and make it read-only so that nothing we type can change the site.
 
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 ```shell
 plone-client profile add demo --url https://demo.plone.org --read-only --frontend-url https://demo.plone.org --secret none
@@ -45,7 +44,6 @@ plone-client profile add demo --url https://demo.plone.org --read-only --fronten
 
 Ask who you are on that site.
 
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 ```shell
 plone-client -p demo info
@@ -69,7 +67,6 @@ Every command prints JSON like this.
 List what is at the {term}`site root`.
 `-f` keeps only the keys you name, which keeps the output short.
 
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 ```shell
 plone-client -p demo ls / -f @id,title,review_state
@@ -109,7 +106,6 @@ Notice `review_state`: it is the {term}`workflow` state of each {term}`content i
 
 Search the whole site for three pages.
 
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 ```shell
 plone-client -p demo search -t Document --limit 3 -f @id,title
@@ -134,7 +130,6 @@ plone-client -p demo search -t Document --limit 3 -f @id,title
 
 Now try to change something.
 
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 <!-- check: exit 7 -->
 ```shell
@@ -181,6 +176,7 @@ plone-client profile add tutorial --url http://localhost:8080/Plone --username a
 ```
 
 When asked for the password, type `admin`.
+These credentials belong to the throwaway {term}`Compose site`; never reuse them on a real site.
 `--use` makes `tutorial` the current profile, so the next commands use it without being told.
 `--frontend-url` names the {term}`Volto` server, which knows the blocks of the site.
 
@@ -452,6 +448,8 @@ plone-client profile remove tutorial
 plone-client profile remove demo
 docker compose down -v
 ```
+
+If a step failed, `docker compose down -v` still resets the site, and `plone-client profile remove NAME` removes each profile you added, `demo` and `tutorial`; then start again from the top.
 
 You have explored a site without an account, added a profile, published a batch of items after previewing the change, and written a script that reacts to exit codes.
 

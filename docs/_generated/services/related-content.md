@@ -104,7 +104,7 @@ Change the text of a comment.
 
 See {meth}`~plone_client.managers.discussion.CommentsManager.update`.
 
-Calls `GET /news/release-6-2/@comments`, `PATCH /news/release-6-2/@comments/1793501267224430` ([`plone.restapi` documentation](https://6.docs.plone.org/plone.restapi/docs/source/endpoints/comments.html)).
+Calls `GET /news/release-6-2/@comments`, `PATCH /news/release-6-2/@comments/1793728542687396` ([`plone.restapi` documentation](https://6.docs.plone.org/plone.restapi/docs/source/endpoints/comments.html)).
 
 `````{tab-set}
 :sync-group: service-example
@@ -129,7 +129,7 @@ Authorization: Basic YWRtaW46YWRtaW4=
 ```
 
 ```http
-PATCH /Plone/++api++/news/release-6-2/@comments/1793501267224430 HTTP/1.1
+PATCH /Plone/++api++/news/release-6-2/@comments/1793728542687396 HTTP/1.1
 Host: localhost:8080
 Accept: application/json
 Content-Type: application/json
@@ -142,7 +142,7 @@ Authorization: Basic YWRtaW46YWRtaW4=
 
 ```shell
 curl -i -X GET http://localhost:8080/Plone/++api++/news/release-6-2/@comments -H 'accept: application/json' -u admin:admin
-curl -i -X PATCH http://localhost:8080/Plone/++api++/news/release-6-2/@comments/1793501267224430 -H 'accept: application/json' -H 'content-type: application/json' -u admin:admin --data-raw '{"text":"Great news, everyone!"}'
+curl -i -X PATCH http://localhost:8080/Plone/++api++/news/release-6-2/@comments/1793728542687396 -H 'accept: application/json' -H 'content-type: application/json' -u admin:admin --data-raw '{"text":"Great news, everyone!"}'
 ```
 ````
 `````
@@ -155,7 +155,7 @@ Delete a comment.
 
 See {meth}`~plone_client.managers.discussion.CommentsManager.delete`.
 
-Calls `GET /news/release-6-2/@comments`, `DELETE /news/release-6-2/@comments/1793501267224430` ([`plone.restapi` documentation](https://6.docs.plone.org/plone.restapi/docs/source/endpoints/comments.html)).
+Calls `GET /news/release-6-2/@comments`, `DELETE /news/release-6-2/@comments/1793728542687396` ([`plone.restapi` documentation](https://6.docs.plone.org/plone.restapi/docs/source/endpoints/comments.html)).
 
 `````{tab-set}
 :sync-group: service-example
@@ -180,7 +180,7 @@ Authorization: Basic YWRtaW46YWRtaW4=
 ```
 
 ```http
-DELETE /Plone/++api++/news/release-6-2/@comments/1793501267224430 HTTP/1.1
+DELETE /Plone/++api++/news/release-6-2/@comments/1793728542687396 HTTP/1.1
 Host: localhost:8080
 Accept: application/json
 Authorization: Basic YWRtaW46YWRtaW4=
@@ -188,7 +188,7 @@ Authorization: Basic YWRtaW46YWRtaW4=
 
 ```shell
 curl -i -X GET http://localhost:8080/Plone/++api++/news/release-6-2/@comments -H 'accept: application/json' -u admin:admin
-curl -i -X DELETE http://localhost:8080/Plone/++api++/news/release-6-2/@comments/1793501267224430 -H 'accept: application/json' -u admin:admin
+curl -i -X DELETE http://localhost:8080/Plone/++api++/news/release-6-2/@comments/1793728542687396 -H 'accept: application/json' -u admin:admin
 ```
 ````
 `````
@@ -224,20 +224,11 @@ client.aliases.create("/news/release-6-2", "/news/plone-6-2")
 :sync: cli
 
 ```shell
-plone-client aliases add /news/release-6-2 /news/plone-62
+plone-client aliases add /news/release-6-2 /news/plone-62 -f items_total
 ```
 
 ```json
 {
-  "@id": "http://localhost:8080/Plone/news/release-6-2/@aliases",
-  "items": [
-    {
-      "path": "/news/plone-6-2"
-    },
-    {
-      "path": "/news/plone-62"
-    }
-  ],
   "items_total": 2
 }
 ```

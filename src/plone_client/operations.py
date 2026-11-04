@@ -342,7 +342,8 @@ def create_with_files(
     an Image inside the item that ``preview_image_link`` points to, which
     is how News Items work on Volto sites. Files are uploaded as ``Image``
     or ``File`` items, in order. Types with blocks get title and
-    description blocks unless blocks are given.
+    description blocks unless blocks are given. ``blocks`` may be a list of
+    blocks, in order, as :func:`~plone_client.blocks.prepare` takes it.
 
     The item must be folderish to hold the files: on Volto sites, Documents
     and News Items are.
@@ -359,16 +360,18 @@ def create_with_files(
         ``publish``.
     :param fields: More field values, merged over ``data``.
     :returns: The result; ``item`` is the new item.
-    :raises ValueError: If a file is missing, or the lead image is not an
-        image or cannot be stored by the type. Nothing is changed then.
+    :raises ValueError: If a file is missing, the lead image is not an
+        image or cannot be stored by the type, or a block has no ``@type``.
+        Nothing is changed then.
     :raises PloneOperationError: If a request fails.
     """
     paths = _check_files(files)
     lead = _pick_lead(paths, lead_image)
+    values = blocks.prepare({**(data or {}), **fields})
     with _operation(client, "create_with_files") as result:
         parent_path = client.content.resolve(parent)
         schema = client.types.get(portal_type).get("properties", {})
-        body = {**(data or {}), **fields}
+        body = dict(values)
         body.update(_default_blocks(schema, body))
         lead, in_field = _lead_target(portal_type, schema, lead, lead_image)
         if in_field and lead is not None:

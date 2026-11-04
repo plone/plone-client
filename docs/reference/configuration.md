@@ -66,6 +66,7 @@ The file never holds a secret.
 | `secret_env` | string | `PLONE_CLIENT_PASSWORD` | Variable holding the secret, with `secret = "env"`. |
 | `secret_command` | string | `""` | Command printing the secret, with `secret = "command"`; run without a shell. |
 | `read_only` | boolean | `false` | Refuse every request that could change the site. |
+| `transitions` | list of strings | `[]` | The only workflow transitions run on the site, such as `["submit"]`; others are refused before they are sent. Empty for all of them. |
 | `timeout` | number | `30.0` | Seconds to wait for the site; must be greater than zero. |
 | `verify` | boolean or string | `true` | Verify TLS certificates. A string is the path of a CA bundle, a file or a directory, used instead of the default certificates; `~` is expanded. |
 | `retries` | integer | `3` | Times a request is repeated after a network error, or after a `429`, `502`, `503`, or `504` answer to a request that is safe to repeat. `0` turns retries off. |
@@ -188,6 +189,7 @@ It then reads the settings from the environment variables below.
 | `PLONE_CLIENT_RETRIES` | Times a request is repeated; `0` turns retries off. |
 | `PLONE_CLIENT_BACKOFF` | Base delay in seconds between retries. |
 | `PLONE_CLIENT_READ_ONLY` | `true` to refuse every change. |
+| `PLONE_CLIENT_TRANSITIONS` | The only workflow transitions to run, separated by commas, such as `submit,retract`. |
 | `PLONE_CLIENT_FRONTEND_URL` | URL of the Volto frontend, when `PLONE_CLIENT_URL` is the backend. |
 | `PLONE_CLIENT_BLOCKS` | The `blocks` setting as a JSON object, such as `{"codeBlock": true}`; see {ref}`reference-configuration-blocks`. |
 

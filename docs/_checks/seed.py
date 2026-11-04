@@ -10,6 +10,7 @@ it can run any number of times.
 """
 
 from plone_client import PloneClient
+from plone_client import PloneNotFoundError
 from typing import Any
 
 import struct
@@ -125,12 +126,27 @@ def seed_files(site: PloneClient) -> None:
         print(f"created {path}")
 
 
+def principal_exists(get: Any, principal_id: str) -> bool:
+    """Whether a user or a group exists.
+
+    :param get: ``site.users.get`` or ``site.groups.get``.
+    :param principal_id: Id of the user or group.
+    :returns: ``True`` when the site has it.
+    """
+    try:
+        get(principal_id)
+    except PloneNotFoundError:
+        return False
+    return True
+
+
 def seed_people(site: PloneClient) -> None:
     """Create a user and a group that holds them.
 
     :param site: The client.
     """
-    if not any(user["id"] == "jdoe" for user in site.users.list()):
+    # Look each one up by id: the answer of @users changed shape in plone.restapi 10.
+    if not principal_exists(site.users.get, "jdoe"):
         site.users.create(
             "jdoe",
             email="jdoe@example.org",
@@ -139,7 +155,7 @@ def seed_people(site: PloneClient) -> None:
             roles=["Member"],
         )
         print("created user jdoe")
-    if not any(group["id"] == "editors" for group in site.groups.list()):
+    if not principal_exists(site.groups.get, "editors"):
         site.groups.create("editors", title="Editors", roles=["Editor"], users=["jdoe"])
         print("created group editors")
 

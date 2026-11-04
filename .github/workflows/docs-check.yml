@@ -1,7 +1,10 @@
 name: Documentation checks
 
-# The pages run against every supported Plone, once a week, so that a new
-# release of an image cannot break a tutorial unnoticed.
+# The pages run once a week against the Plone releases whose output they show,
+# so that a new release of an image cannot break a tutorial unnoticed. Plone 6.0
+# answers with other fields (no preview_image_link, fewer metadata columns);
+# the integration tests cover it, and reference/compatibility.md lists the
+# differences.
 on:
   schedule:
     - cron: "17 6 * * 1"
@@ -17,7 +20,6 @@ jobs:
         image:
           - "plone/plone-backend:6.2"
           - "plone/plone-backend:6.1"
-          - "plone/plone-backend:6.0"
     steps:
       - uses: actions/checkout@v7
 
@@ -31,6 +33,13 @@ jobs:
         env:
           PLONE_IMAGE: ${{ matrix.image }}
         run: make docs-check
+
+      # Runs even when a page failed, so one run reports both.
+      - name: Check the service examples
+        if: ${{ !cancelled() }}
+        env:
+          PLONE_IMAGE: ${{ matrix.image }}
+        run: make docs-services-check
 
   demo:
     name: "demo.plone.org"

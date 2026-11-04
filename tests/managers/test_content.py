@@ -2,6 +2,7 @@ from .. import DOCUMENT
 from .. import SITE_URL
 from . import check_request
 from . import UID
+from plone_client import blocks
 from plone_client.exceptions import PloneNotFoundError
 
 import pytest
@@ -227,3 +228,82 @@ def test_real_create_does_not_ask_for_types(client, site):
     site.add("POST", "/", {"@id": f"{SITE_URL}/news"}, status=201)
     client.content.create("/", "Document", title="News")
     assert [request.method for request in site.requests] == ["POST"]
+
+
+DOCUMENT_SCHEMA = {
+    "properties": {"title": {}, "description": {}, "blocks": {}, "blocks_layout": {}}
+}
+TEXT = {"@type": "slate", "plaintext": "Hi"}
+
+
+@pytest.fixture
+def document_schema(site):
+    site.add("GET", "/@types/Document", DOCUMENT_SCHEMA)
+
+
+@pytest.mark.usefixtures("types_at_root", "document_schema")
+def test_dry_run_warns_about_a_list_of_blocks(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.create("/", "Document", title="News", blocks=[TEXT])
+    assert answer["warning"].startswith(
+        "The site would refuse this: blocks must be a mapping of block ids"
+    )
+
+
+@pytest.mark.usefixtures("types_at_root", "document_schema")
+def test_dry_run_warns_about_a_block_without_type(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.create(
+        "/",
+        "Document",
+        blocks={"a": {"plaintext": "Hi"}},
+        blocks_layout={"items": ["a"]},
+    )
+    assert answer["warning"] == "The site would refuse this: blocks without @type: a."
+
+
+@pytest.mark.usefixtures("types_at_root", "document_schema")
+def test_dry_run_warns_about_a_layout_that_misses_blocks(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.create("/", "Document", blocks={"a": TEXT, "b": TEXT})
+    assert "blocks_layout.items must list the ids in blocks" in answer["warning"]
+
+
+@pytest.mark.usefixtures("types_at_root", "document_schema")
+def test_dry_run_accepts_built_blocks(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.create(
+        "/", "Document", title="News", **blocks.build(blocks.title(), TEXT)
+    )
+    assert "warning" not in answer
+
+
+@pytest.mark.usefixtures("types_at_root", "document_schema")
+def test_dry_run_warns_about_fields_the_type_lacks(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.create(
+        "/", "Document", id="news", title="News", image="x", text="y"
+    )
+    assert answer["warning"] == (
+        "The site would ignore fields that Document does not have: image, text."
+    )
+
+
+def test_dry_run_joins_its_warnings(client_factory, site):
+    site.add("GET", "/@types", [{"@id": f"{SITE_URL}/@types/Folder", "addable": False}])
+    site.add("GET", "/@types/Folder", {"properties": {"title": {}}})
+    client = client_factory(dry_run=True)
+    answer = client.content.create("/", "Folder", title="News", blocks=[TEXT])
+    assert answer["warning"].count("The site would") == 3
+
+
+def test_dry_run_update_warns_about_blocks(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.update("/news", blocks=[TEXT])
+    assert answer["warning"].startswith("The site would refuse this: blocks must")
+
+
+def test_dry_run_update_without_blocks_has_no_warning(client_factory):
+    client = client_factory(dry_run=True)
+    answer = client.content.update("/news", title="News")
+    assert "warning" not in answer

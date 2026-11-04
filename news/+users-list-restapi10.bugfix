@@ -1,0 +1,1 @@
+Fixed `users.list` and `plone-client users list` on Plone 6.2, where `plone.restapi` 10 answers `@users` with an object instead of a list. @ericof

@@ -13,7 +13,15 @@ import sys
 
 PNG = b"\x89PNG\r\n\x1a\n"
 
-VOLTO_NEWS = {"properties": {"title": {}, "blocks": {}, "preview_image_link": {}}}
+#: Real schemas list blocks_layout next to blocks (checked on Plone 6.0 and 6.1).
+VOLTO_NEWS = {
+    "properties": {
+        "title": {},
+        "blocks": {},
+        "blocks_layout": {},
+        "preview_image_link": {},
+    }
+}
 CLASSIC_NEWS = {"properties": {"title": {}, "image": {}}}
 
 needs_html2blocks = pytest.mark.skipif(
@@ -120,6 +128,29 @@ class TestCreateWithFiles:
         assert len(result.requests) == 8
         assert result.requests[0]["status"] == 200
         assert result.item["@id"] == f"{SITE_URL}/news/office"
+
+    def test_blocks_as_a_list(self, client, fake_create):
+        site = fake_create
+        site.add("GET", "/@types/News Item", VOLTO_NEWS)
+        text = {"@type": "slate", "plaintext": "Hi"}
+        operations.create_with_files(
+            client,
+            "/news",
+            "News Item",
+            [],
+            data={"title": "Office", "blocks": [{"@type": "title"}, text]},
+            lead_image=None,
+        )
+        created = json.loads(site.requests[1].content)
+        layout = created["blocks_layout"]["items"]
+        assert [created["blocks"][i]["@type"] for i in layout] == ["title", "slate"]
+
+    def test_block_without_type_changes_nothing(self, client, site):
+        with pytest.raises(ValueError, match="@type"):
+            operations.create_with_files(
+                client, "/news", "News Item", [], data={"blocks": [{"text": "Hi"}]}
+            )
+        assert site.requests == []
 
     def test_image_field(self, client, fake_create, files):
         site = fake_create
@@ -381,7 +412,9 @@ class TestCreatePage:
     @needs_html2blocks
     def test_explicit_lead_needs_a_lead_field(self, client, fake_create, files):
         fake_create.add(
-            "GET", "/@types/Document", {"properties": {"title": {}, "blocks": {}}}
+            "GET",
+            "/@types/Document",
+            {"properties": {"title": {}, "blocks": {}, "blocks_layout": {}}},
         )
         with pytest.raises(ValueError, match="has no lead image field"):
             operations.create_page(

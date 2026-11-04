@@ -73,11 +73,20 @@ To complete commands in your shell, run `plone-client --install-completion`.
 ## Add the optional features
 
 Two more extras add optional features.
+This table shows what each part needs.
 
-| Extra | Adds | Needs |
+<!-- source: pyproject.toml requires-python and [project.optional-dependencies]; src/plone_client/blocks.py _converter -->
+
+| Install | Adds | Python |
 |---|---|---|
-| `markdown` | Pages from Markdown or HTML, converted to blocks by `collective.html2blocks`. | Python 3.12 or later; on 3.11 it installs nothing. |
-| `mcp` | The MCP server, `plone-client mcp`, with the command line it runs in. | |
+| `plone-client` | The library. | 3.11 or later |
+| `plone-client[cli]` | The command line. | 3.11 or later |
+| `plone-client[mcp]` | The MCP server, `plone-client mcp`, with the command line it runs in. | 3.11 or later |
+| `plone-client[markdown]` | Pages from Markdown or HTML, converted to blocks by `collective.html2blocks`. | 3.12 or later |
+
+On Python 3.11, the `markdown` extra installs nothing.
+`create-page`, `upload-tree --pages`, the `create_page` tool, and Markdown in {mod}`plone_client.blocks` then raise {class}`~plone_client.exceptions.PloneConfigurationError`, which names the fix.
+{ref}`tutorial-first-agent-session` and {ref}`tutorial-editorial-assistant` need the extra, so they need Python 3.12.
 
 Combine extras as you need them.
 

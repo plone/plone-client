@@ -20,6 +20,24 @@ A user who can only edit `/news` cannot change anything else, whatever the agent
 Use a dedicated user with the `Editor` role on the folders it needs, not `admin`.
 {ref}`howto-users-sharing` creates one.
 
+(howto-protect-enforcement)=
+
+## Know who enforces what
+
+Some layers below stop a request, and some only describe what should happen.
+Rely on the first kind; treat the second as guidance.
+
+| Layer | Enforced by | When | Source |
+|---|---|---|---|
+| Plone permissions | Plone | On every request, on the site | The site; plone-client sends every request as the profile's user |
+| {term}`Read-only` profile or client | plone-client, in the client | Before the request is sent | `src/plone_client/client.py` `PloneClient.request` |
+| `transitions` of a profile or client | plone-client, in the client | Before the request is sent | `src/plone_client/client.py` `PloneClient._check_transition` |
+| `--tool` allowlist | The MCP server | When the server starts; a tool left out does not exist for the model | `src/plone_client/mcp_server.py` `build_server` |
+| {term}`Dry run` | Nothing: it is a preview mode | Changes are logged instead of sent, and reported as planned | `src/plone_client/client.py` `PloneClient.request` |
+| The {term}`skill`'s rules | Nothing: they are guidance the agent may follow | Whenever the agent reads them | `src/plone_client/skill/SKILL.md` |
+| The agent application's permissions and confirmations | The agent application, outside plone-client | Before the agent runs a command or a tool | Your agent's settings |
+| Your approval of a plan | You, only if your setup makes it a gate | When you restart a server without `--dry-run`, or your code sends the change | {ref}`tutorial-editorial-assistant`, {ref}`howto-custom-agent` |
+
 ## Know what the model sees
 
 <!-- source: src/plone_client/mcp_server.py _instructions, Site.summary, site_info, _per_site -->
@@ -90,6 +108,50 @@ With several sites and at least one that accepts changes, the server offers the 
 It follows the same rules: on a read-only site, it refuses a request that would change something.
 ```
 
+## Let it submit, not publish
+
+<!-- source: src/plone_client/client.py PloneClient._check_transition; src/plone_client/profiles.py Profile.transitions -->
+
+A profile with `transitions` runs only the workflow {term}`transitions <transition>` it lists, and refuses the others before they leave your computer.
+Give the assistant a profile that can submit an item for review, and keep publishing for a person.
+
+<!-- check: stdin admin -->
+```shell
+plone-client profile add review --url http://localhost:8080/Plone --username admin --transition submit
+```
+
+<!-- check: exit 7 -->
+```shell
+plone-client -p review workflow /news/release-party publish
+```
+
+```json
+{
+  "error": {
+    "type": "PloneTransitionError",
+    "message": "POST /news/release-party/@workflow/publish refused: the client allows only these transitions: submit"
+  }
+}
+```
+
+```shell
+plone-client -p review workflow /news/release-party submit -f review_state
+```
+
+```json
+{
+  "review_state": "pending"
+}
+```
+
+Repeat `--transition` to allow more, such as `retract`.
+The same list works in Python, as `PloneClient(..., transitions=["submit"])`, and in `PLONE_CLIENT_TRANSITIONS`.
+The MCP server shows it to the model in `list_sites`, and refuses the other transitions, also through `call_service`.
+
+```{versionadded} 1.0.0a5
+The `transitions` setting.
+```
+
 ## Preview with a dry run
 
 A {term}`dry run` is not a safety boundary, it is a way to look before you approve.
@@ -157,7 +219,7 @@ Run the server under an account with little to read, or leave those tools out.
 
 The command line asks for {term}`confirmation` before `delete`, `users delete`, and `groups delete`, and refuses them without a terminal unless given `--yes`.
 The skill tells an agent never to pass `--yes` unless you confirmed the exact items.
-That is a rule the agent follows, not a barrier: an agent that ignores the skill can pass `--yes`.
+That is guidance the agent follows, not a barrier: an agent that ignores the skill can pass `--yes`.
 
 The MCP server has no such step.
 `delete_content` deletes what the model names, and its annotations mark it as destructive so that a client can ask you first.
@@ -178,13 +240,9 @@ Let an agent work on staging, or on items nobody is editing.
 <!-- source: src/plone_client/mcp_server.py BearerToken, HTTPSettings, http_app; src/plone_client/credentials.py -->
 
 The server over HTTP needs a token of at least 32 characters on every request, and it never starts without one.
+Clients of the server never get the credentials of the site, and they cannot point it at another site.
 
-- Listen on the loopback address, the default, unless you put a proxy that adds TLS in front of it: the token and the content of the site would otherwise cross the network in clear text.
-- Give each team its own server and token: one server answers everyone who has its token, with the same profiles and the same access.
-- In a container, set the token in `PLONE_CLIENT_MCP_TOKEN`, which wins over the keyring.
-- Clients of the server never get the credentials of the site, and they cannot point it at another site.
-
-{ref}`reference-assistant-server-http` has the details.
+Before you deploy it, go through the checklist in {ref}`reference-assistant-server-http`.
 
 ## Related
 

@@ -372,6 +372,7 @@ Add a profile, and store its secret in the keyring.
 | `--secret-env` | str | no | `PLONE_CLIENT_PASSWORD` | Variable holding the secret, with --secret env. |
 | `--secret-command` | str | no | — | Command printing the secret, with --secret command. |
 | `--read-only`, `--no-read-only` | flag | no | — | Refuse changes to this site. |
+| `--transition` | str | no | — | The only workflow transition run on this site; repeat it to allow more. Without it, every transition runs. |
 | `--timeout` | float | no | — | Seconds to wait for the site. |
 | `--verify` | str | no | — | Verify TLS certificates: true, false, or a CA bundle path. |
 | `--retries` | int | no | — | Times a request is repeated after a network error. |

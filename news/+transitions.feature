@@ -1,0 +1,1 @@
+A profile, a client, or `PLONE_CLIENT_TRANSITIONS` can list the only workflow transitions to run, such as `submit`; the others are refused before they are sent, with exit code 7, also by the MCP server and `call_service`. @ericof

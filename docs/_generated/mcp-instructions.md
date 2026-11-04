@@ -26,6 +26,8 @@ Content model, mostly for sites with the Volto frontend:
   `content_types` before setting unusual fields.
 - New items are private until a workflow transition such as `publish` runs.
 
-Changes are refused when the server is read-only. In a dry run, nothing is
-changed: tools return the requests they would have sent.
+Changes are refused when the server is read-only, and a site that lists
+`transitions` in list_sites runs only those workflow transitions. In a dry
+run, nothing is changed: tools return the requests they would have sent,
+with a `warning` when the site would refuse or ignore part of them.
 ```

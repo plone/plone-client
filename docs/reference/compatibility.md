@@ -30,6 +30,7 @@ What a site supports depends on the `plone.restapi` version it runs, not on plon
 
 {bdg-success}`Tested`
 : The integration test suite runs against the `plone/plone-backend` image of this release.
+  The pages of this documentation run only on Plone 6.1 and 6.2, as {ref}`reference-compatibility-examples` explains.
 
 {bdg-success}`Supported`
 : Every service plone-client uses is available.
@@ -57,9 +58,23 @@ On an older site, the methods below raise {class}`~plone_client.exceptions.Plone
 
 Logging in with `POST @login` works on every supported version.
 
+(reference-compatibility-examples)=
+
+## Examples in this documentation
+
+<!-- source: weekly docs-check run on plone/plone-backend:6.0, 2026-11-02 -->
+
+The output in the tutorials and how-to guides comes from Plone 6.1, and Plone 6.2 gives the same.
+Plone 6.0 answers differently in a few places.
+
+- A News Item has an `image` field for its {term}`lead image`, where 6.1 has `preview_image_link`, and a Page or File has no lead image.
+- Listings and search results carry fewer metadata fields: no `effective`, `end`, `getObjSize`, `getRemoteUrl`, `head_title`, `mime_type`, `nav_title`, or `start`.
+- An address without the site id, such as `http://localhost:8080`, answers `404 Not Found` instead of the server error about `portal_catalog`, so the command exits with `5` instead of `9`.
+
 ## Volto
 
 `client.block_types`, the `block-types` command, and the `block_types` tool of the MCP server ask the `@blocks-schema` service of the Volto server.
+<!-- source: plone/volto#8023, packages/volto/CHANGELOG.md under "19.6.0 (2026-10-27)" -->
 That service comes with Volto 19.6.0.
 On sites with an older Volto, they describe Volto's core blocks instead, as {ref}`reference-managers-block-types` explains.
 

@@ -80,6 +80,7 @@ Where even reads should stay apart, such as sites of different customers, separa
 ## Learning the blocks of a site
 
 To write a page, an assistant must know which blocks the site has and what data each one takes.
+<!-- source: plone/volto#8023, packages/volto/CHANGELOG.md under "19.6.0 (2026-10-27)" -->
 Only the Volto frontend knows that, since add-ons and projects register their own blocks, so Volto 19.6.0 and later have an `@blocks-schema` service that describes them.
 On sites with an older Volto, plone-client describes Volto's core blocks from documentation that ships with it, and says so.
 An assistant then still writes correct text, image, and teaser blocks, and knows that the site may have more.

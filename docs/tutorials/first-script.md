@@ -48,7 +48,6 @@ for item in client.search.iter(portal_type="Document", limit=3):
 
 Run it.
 
-<!-- demo-site: provisional -->
 <!-- check: demo -->
 ```shell
 uv run python demo.py
@@ -76,6 +75,7 @@ docker compose up --wait
 ```
 
 Open `http://localhost:3000` to see it in {term}`Volto`, its web interface, with the user `admin` and the password `admin`.
+These credentials belong to the throwaway {term}`Compose site`; never reuse them on a real site.
 The site has sample content; {ref}`howto-run-a-site` lists it.
 The API of the same site is at `http://localhost:8080/Plone`.
 
@@ -138,6 +138,45 @@ Created http://localhost:8080/Plone/hello in state private
 
 Open `http://localhost:3000/hello` to see the page.
 {mod}`plone_client.blocks` built the title, description, and text blocks a Volto page needs.
+This is what `blocks.build` gives the site: the blocks by ID in `blocks`, and their order in `blocks_layout`.
+
+```shell
+uv run python -c 'import json; from plone_client import blocks; print(json.dumps(blocks.build(blocks.title(), blocks.description(), blocks.text("It works.")), indent=2))'
+```
+
+```json
+{
+  "blocks": {
+    "8b2ddd1f-07ed-4661-a7df-9cff54a1ef79": {
+      "@type": "title"
+    },
+    "39b45a07-369b-406c-acf6-c45ff9ee84ce": {
+      "@type": "description"
+    },
+    "512db700-c358-4f89-aa99-78411817ece1": {
+      "@type": "slate",
+      "plaintext": "It works.",
+      "value": [
+        {
+          "type": "p",
+          "children": [
+            {
+              "text": "It works."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "blocks_layout": {
+    "items": [
+      "8b2ddd1f-07ed-4661-a7df-9cff54a1ef79",
+      "39b45a07-369b-406c-acf6-c45ff9ee84ce",
+      "512db700-c358-4f89-aa99-78411817ece1"
+    ]
+  }
+}
+```
 
 Run the script a second time.
 
@@ -403,6 +442,8 @@ Stop the site and throw its content away.
 ```shell
 docker compose down -v
 ```
+
+If a step failed, `docker compose down -v` still resets the site, and `plone-client profile remove tutorial` removes the profile you added; then start again from the top.
 
 <!-- check: stop -->
 

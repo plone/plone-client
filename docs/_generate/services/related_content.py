@@ -47,7 +47,10 @@ EXAMPLES = [
     Example(
         "aliases.create",
         'client.aliases.create("/news/release-6-2", "/news/plone-6-2")',
-        cli="plone-client aliases add /news/release-6-2 /news/plone-62",
+        cli="plone-client aliases add /news/release-6-2 /news/plone-62 -f items_total",
+        # Plone 6.2 adds datetime, manual and redirect-to to each alias.
+        keep=("items", "items_total"),
+        item_keep=("path",),
         doc="aliases",
     ),
     Example(

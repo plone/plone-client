@@ -25,6 +25,7 @@ from .exceptions import PloneOperationError
 from .exceptions import PloneReadOnlyError
 from .exceptions import PloneServerError
 from .exceptions import PloneTimeoutError
+from .exceptions import PloneTransitionError
 from .managers.files import file_data
 
 
@@ -46,6 +47,7 @@ __all__ = [
     "PloneReadOnlyError",
     "PloneServerError",
     "PloneTimeoutError",
+    "PloneTransitionError",
     "TokenAuth",
     "file_data",
 ]

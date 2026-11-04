@@ -38,6 +38,7 @@ docker compose up --wait
 
 Open `http://localhost:3000` to see the site.
 The user is `admin`, and the password is `admin`.
+These credentials belong to the throwaway {term}`Compose site`; never reuse them on a real site.
 
 ## Install plone-client
 
@@ -87,6 +88,26 @@ plone-client mcp --group editorial --dry-run
 {ref}`howto-assistant` shows where this command goes in each assistant.
 This server offers every tool, including `delete_content` and `call_service`, on the blog.
 On a real site, offer fewer with `--tool`; {ref}`howto-protect` has sets to start from.
+
+(tutorial-editorial-assistant-approval)=
+
+```{important}
+A {term}`dry run` is a mode the server starts in, not a step of the conversation.
+Saying "yes" to the assistant changes nothing: the server is still in a dry run.
+Approval is you starting the server again without `--dry-run`, and the assistant repeating the call.
+A model that says you approved is not an authorization.
+```
+
+The whole task follows this sequence.
+
+```text
+1. Plan     the server runs with --dry-run; the assistant calls the tool
+2. Inspect  you read the requests list of the answer
+3. Decide   you approve the plan, or ask for another one
+4. Restart  you start the server again without --dry-run
+5. Apply    the assistant repeats the same call
+6. Verify   you, or the assistant, read the result back from the site
+```
 
 ## Stand in for the assistant
 
@@ -237,17 +258,21 @@ python ask.py "mcp --group editorial --dry-run" create_content_with_files '{"sit
     "GET http://localhost:8080/Plone/++api++/@types/News%20Item",
     "POST http://localhost:8080/Plone/++api++/news",
     "GET http://localhost:8080/Plone/++api++/news/@types",
+    "GET http://localhost:8080/Plone/++api++/@types/News%20Item",
     "POST http://localhost:8080/Plone/++api++/news/conference-announced",
     "GET http://localhost:8080/Plone/++api++/news/conference-announced/@types",
+    "GET http://localhost:8080/Plone/++api++/@types/Image",
     "POST http://localhost:8080/Plone/++api++/news/conference-announced",
     "GET http://localhost:8080/Plone/++api++/news/conference-announced/@types",
+    "GET http://localhost:8080/Plone/++api++/@types/Image",
     "PATCH http://localhost:8080/Plone/++api++/news/conference-announced"
   ]
 }
 ```
 
 This is the preview that the assistant shows you.
-Each entry in `created` has `planned`, and each request in the list is one that a real run would send.
+Each entry in `created` has `planned`, and each `POST` and `PATCH` in the list is one that a real run would send.
+The `GET` requests read the site to check the plan: whether `/news` can hold the type, and whether the type has the fields given; a problem would show up in a `warning`.
 The last request sets the {term}`lead image`, `preview_image_link`, and you did not have to know that.
 
 ## Try the site that is read-only
@@ -266,7 +291,7 @@ Error executing tool create_content: {"error": {"type": "PloneReadOnlyError", "m
 ## Approve and apply
 
 You read the preview, and you agree.
-A {term}`dry run` is a mode of the server, not a step of a conversation, so your approval is to start the server again.
+As {ref}`the approval note <tutorial-editorial-assistant-approval>` says, your approval is to start the server again.
 Start it without `--dry-run`, and repeat the call.
 
 ```shell
@@ -278,7 +303,7 @@ python ask.py "mcp --group editorial" create_content_with_files '{"site": "blog"
   "item": {
     "@id": "http://localhost:8080/Plone/news/conference-announced",
     "@type": "News Item",
-    "UID": "a6490fd303ee42bcae004b2558d9a23f",
+    "UID": "f326728738764807a940a8e5b6854378",
     "id": "conference-announced",
     "title": "Conference announced",
     "review_state": "private"
@@ -327,7 +352,7 @@ plone-client -p blog get /news/conference-announced -f review_state,preview_imag
   "preview_image_link": {
     "@id": "http://localhost:8080/Plone/news/conference-announced/lead.png",
     "@type": "Image",
-    "UID": "2b55b9e8f3c24f99bfca2107f6e366ac",
+    "UID": "ce561963a3b44ac0bcde9a36a71b1c65",
     "description": "",
     "effective": "1969-12-31T00:00:00+00:00",
     "end": null,
@@ -339,17 +364,17 @@ plone-client -p blog get /news/conference-announced -f review_state,preview_imag
       "image": [
         {
           "content-type": "image/png",
-          "download": "@@images/image-64-fded1ec5b75f3c439d9d92899c22571c.png",
+          "download": "@@images/image-64-2a4bfece57893beaf9eb6ac9f01ee4be.png",
           "filename": "lead.png",
           "height": 64,
           "scales": {
             "icon": {
-              "download": "@@images/image-32-9a5017baf58da7ab7ef884f77b941157.png",
+              "download": "@@images/image-32-be54f35f6505e07939e8f8198b381147.png",
               "height": 32,
               "width": 32
             },
             "tile": {
-              "download": "@@images/image-64-fded1ec5b75f3c439d9d92899c22571c.png",
+              "download": "@@images/image-64-2a4bfece57893beaf9eb6ac9f01ee4be.png",
               "height": 64,
               "width": 64
             }
@@ -383,6 +408,80 @@ docker compose down -v
 plone-client profile remove blog
 plone-client profile remove docs
 ```
+
+If a step failed, the same commands reset everything, and you can start again from the top.
+
+`````{dropdown} What a real session looked like
+<!--
+Maintainer: Claude Code 2.1.304 in print mode, model claude-opus-5-5, with only
+this server on the editorial group, on 2026-11-03 against Plone 6.1. Trimmed:
+tool results shortened, file paths cut to their names, ports set to the
+tutorial's 8080 and 3000. A real model's calls are not reproducible, so the
+page check never runs this; replace it with a new session when the tools change.
+-->
+
+This is one real session with Claude Code, trimmed.
+The model chose its own calls, and they differ from the script above.
+
+With the server started with `--dry-run`, and the prompt from the task above:
+
+```text
+> search {"site": "blog", "text": "conference"}
+  {"items": [], "items_count": 0}
+> list_children {"site": "blog", "path": "/news"}
+  {"items": [{"@id": ".../news/release-6-2", ...}, ...]}
+> get_workflow {"site": "blog", "path": "/news/release-party"}
+  {"state": {"id": "private"}, "transitions": [{"id": "publish"}, {"id": "submit"}]}
+> block_types {"site": "blog", "block_id": "image"}
+  ## Image (`image`) ...
+> create_content_with_files {"site": "blog", "parent": "/news", "portal_type": "News Item",
+    "files": ["lead.png", "stage.png"], "lead_image": 0, "publish": "submit",
+    "data": {"title": "The conference", "description": "Highlights from the conference.",
+             "blocks": [{"@type": "slate", ...}, {"@type": "image", "url": "/news/the-conference/stage.png", ...}]}}
+  {"operation": "create_with_files", "dry_run": true, "item": {..., "planned": true}, ...}
+
+I ran a dry run, so nothing on the blog has changed. The server is in dry-run
+mode anyway, so I couldn't make real changes even after you approve. Someone
+has to switch the server off dry-run first.
+[... the plan: create the item, upload both images, set lead.png as the lead
+image, add a text block and an image block, run submit ...]
+The blog has nothing about a conference ... The title and body above are
+placeholders I made up.
+```
+
+The server started again without `--dry-run`, and the approval:
+
+```text
+I read the preview and I approve it. I restarted the server without --dry-run.
+Do it now, publish the item, and read it back to show me the result.
+
+> create_content_with_files {... same files, "data": {..., "blocks": [{"@type": "slate", ...}]}}
+  Error executing tool create_content_with_files: {"error": {"status_code": 400,
+  "type": "BadRequest", "message": "[{'message': 'Wrong contained type', 'field': 'blocks', ...}]"},
+  "result": {"created": [], ...}}
+
+Nothing was created (the POST failed with 400). The site rejected the blocks list
+in the create request, so I'll create the item without blocks and add them afterwards.
+
+> create_content_with_files {... "data": {"title": "The conference", "description": "Highlights from the conference."}}
+  {"dry_run": false, "item": {"@id": ".../news/the-conference", "review_state": "private", ...}, ...}
+> add_blocks {"site": "blog", "path": "/news/the-conference", "items": [{"@type": "slate", ...}, {"@type": "image", ...}]}
+> run_transition {"site": "blog", "path": "/news/the-conference", "transition": "publish"}
+  {"action": "publish", "review_state": "published", ...}
+> get_content {"site": "blog", "path": "/news/the-conference", "fields": ["title", "review_state", "preview_image_link", "blocks", ...]}
+> list_children {"site": "blog", "path": "/news/the-conference"}
+
+The news item is live at http://localhost:8080/Plone/news/the-conference.
+[... a table of what the site returned: published, lead image lead.png,
+body text then image stage.png ...]
+The first create attempt failed. ... I ran publish, as you asked, not submit.
+```
+
+Two things to notice.
+The model knew that saying "yes" changes nothing while the server is in a dry run.
+And the dry run accepted a `blocks` list that the site then refused, so a preview shows the requests, not whether the site accepts them.
+Since 1.0.0a5, `create_content_with_files` takes blocks as a list, and a dry run warns about blocks the site would refuse.
+`````
 
 ## Next steps
 

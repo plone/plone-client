@@ -68,7 +68,7 @@ print(json.dumps(result.to_dict(), indent=2))
   "item": {
     "@id": "http://localhost:8080/Plone/news/our-new-office",
     "@type": "News Item",
-    "UID": "e084d51cf7914a61a2c962dba9969cac",
+    "UID": "e5d8229c6f034218b0e2d99e9bdab722",
     "id": "our-new-office",
     "title": "Our new office",
     "review_state": "published"
@@ -77,7 +77,7 @@ print(json.dumps(result.to_dict(), indent=2))
     {
       "@id": "http://localhost:8080/Plone/news/our-new-office",
       "@type": "News Item",
-      "UID": "e084d51cf7914a61a2c962dba9969cac",
+      "UID": "e5d8229c6f034218b0e2d99e9bdab722",
       "id": "our-new-office",
       "title": "Our new office",
       "review_state": "private"
@@ -85,7 +85,7 @@ print(json.dumps(result.to_dict(), indent=2))
     {
       "@id": "http://localhost:8080/Plone/news/our-new-office/lead.png",
       "@type": "Image",
-      "UID": "2fd4de0d3855441a8e7e15250980c5f8",
+      "UID": "83ca2ca5c3304e20854000772a4e33ee",
       "id": "lead.png",
       "title": "lead.png",
       "review_state": null,
@@ -220,6 +220,11 @@ print(json.dumps(result.to_dict(), indent=2))
       "status": 200
     },
     {
+      "method": "GET",
+      "url": "http://localhost:8080/Plone/++api++/@types/News%20Item",
+      "status": 200
+    },
+    {
       "method": "POST",
       "url": "http://localhost:8080/Plone/++api++/news/our-new-office",
       "status": null,
@@ -228,6 +233,11 @@ print(json.dumps(result.to_dict(), indent=2))
     {
       "method": "GET",
       "url": "http://localhost:8080/Plone/++api++/news/our-new-office/@types",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8080/Plone/++api++/@types/Image",
       "status": 200
     },
     {

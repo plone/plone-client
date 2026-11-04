@@ -152,6 +152,8 @@ class Profile:
     :param secret_command: Command printing the secret, with
         ``secret = "command"``; run without a shell.
     :param read_only: Refuse every request that could change the site.
+    :param transitions: The only workflow transitions run on this site, such
+        as ``["submit"]``; empty for all of them.
     :param timeout: Seconds to wait for the site.
     :param verify: Verify TLS certificates; a path verifies them against
         that CA bundle (a file or a directory) instead of the default one.
@@ -175,6 +177,7 @@ class Profile:
     secret_env: str = "PLONE_CLIENT_PASSWORD"
     secret_command: str = ""
     read_only: bool = False
+    transitions: list[str] = field(default_factory=list)
     timeout: float = 30.0
     verify: bool | str = True
     retries: int = 3
@@ -203,6 +206,12 @@ class Profile:
                 f"Profile {self.name!r}: secret_command is required"
             )
         self._check_connection()
+        if not isinstance(self.transitions, list) or not all(
+            isinstance(item, str) and item for item in self.transitions
+        ):
+            raise PloneConfigurationError(
+                f"Profile {self.name!r}: transitions must be a list of transition ids"
+            )
         try:
             self.blocks = check_setting(self.blocks)
         except ValueError as error:
@@ -298,6 +307,8 @@ class Profile:
             settings["frontend_url"] = self.frontend_url
         if self.blocks:
             settings["blocks"] = dict(self.blocks)
+        if self.transitions:
+            settings["transitions"] = list(self.transitions)
         secret = self.get_secret()
         if self.auth == "token":
             settings["token"] = secret
@@ -565,7 +576,8 @@ def settings_from_env(
     Reads ``URL``, ``USERNAME`` (or ``USER``), ``PASSWORD``, ``TOKEN``,
     ``AUTH_METHOD``, ``API_PREFIX``, ``TIMEOUT``, ``VERIFY`` (``true``,
     ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF``, ``READ_ONLY``,
-    ``FRONTEND_URL`` and ``BLOCKS`` (a JSON object), each after the prefix.
+    ``TRANSITIONS`` (ids separated by commas), ``FRONTEND_URL`` and
+    ``BLOCKS`` (a JSON object), each after the prefix.
     With ``prefix="REMOTE_"``, this reads the ``REMOTE_URL``, ``REMOTE_USER``
     and ``REMOTE_PASSWORD`` variables used by older scripts.
 
@@ -597,6 +609,10 @@ def settings_from_env(
         settings["verify"] = parse_verify(value("VERIFY"))
     if value("READ_ONLY"):
         settings["read_only"] = _bool(value("READ_ONLY"))
+    if value("TRANSITIONS"):
+        settings["transitions"] = [
+            item.strip() for item in value("TRANSITIONS").split(",") if item.strip()
+        ]
     if value("BLOCKS"):
         settings["blocks"] = _env_blocks(value("BLOCKS"), f"{prefix}BLOCKS")
     return settings

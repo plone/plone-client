@@ -23,6 +23,10 @@ plone-client ships an [Agent Skill](https://agentskills.io/): a `SKILL.md` file 
 | `plone-client skill install --user` | `~/.claude/skills/plone-client/` |
 | `plone-client skill install --dir DIR` | `DIR/plone-client/` |
 
+```{versionchanged} 1.0.0a4
+The skill has a second file, `references/blocks.md`, and `skill show` takes the name of a file.
+```
+
 The folder holds `SKILL.md`, which an agent reads first, and `references/blocks.md`, which it reads when it works with {term}`blocks <block>`.
 The command replaces an older copy, and prints `installed`, with the path of `SKILL.md`, and `replaced`.
 `plone-client skill show` prints `SKILL.md`, and `plone-client skill show references/blocks.md` prints the reference.

@@ -25,13 +25,18 @@ class UsersManager(BaseManager):
         :param limit: Maximum number of users (the site defaults to 25).
         :returns: The users.
         """
-        return self._client.get(
+        answer = self._client.get(
             "/@users",
             query=query,
             search=search,
             limit=limit,
             **{"groups-filter:list": list(groups) if groups else None},
         )
+        # plone.restapi 10 answers an object with ``items`` and
+        # ``items_total``; earlier versions answer the list itself.
+        if isinstance(answer, dict):
+            return list(answer.get("items", []))
+        return answer
 
     def get(self, user_id: str) -> dict[str, Any]:
         """A user.

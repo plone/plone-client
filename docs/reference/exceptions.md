@@ -21,6 +21,7 @@ Every exception derives from {class}`~plone_client.exceptions.PloneClientError`,
 | {class}`~plone_client.exceptions.PloneClientError` | `Exception` | Base of all the others. | 1 |
 | {class}`~plone_client.exceptions.PloneConfigurationError` | `PloneClientError` | A profile, a secret, or the URL is missing or invalid. | 3 |
 | {class}`~plone_client.exceptions.PloneReadOnlyError` | `PloneClientError` | A read-only client is asked to change the site. | 7 |
+| {class}`~plone_client.exceptions.PloneTransitionError` | `PloneReadOnlyError` | A client with `transitions` is asked to run another workflow transition. | 7 |
 | {class}`~plone_client.exceptions.PloneConnectionError` | `PloneClientError` | The site cannot be reached. | 8 |
 | {class}`~plone_client.exceptions.PloneTimeoutError` | `PloneConnectionError` | The site does not answer in time. | 8 |
 | {class}`~plone_client.exceptions.PloneOperationError` | `PloneClientError` | An operation of {mod}`plone_client.operations` stops part way; its `result` lists what was done, and `__cause__` is the error that stopped it. | That of `__cause__` |

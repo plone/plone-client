@@ -587,7 +587,9 @@ def test_create_page_tool_takes_a_type_and_files(client, site, tmp_path):
     photo = tmp_path / "lead.png"
     photo.write_bytes(b"\x89PNG\r\n\x1a\n")
     site.add(
-        "GET", "/@types/Post", {"properties": {"blocks": {}, "preview_image_link": {}}}
+        "GET",
+        "/@types/Post",
+        {"properties": {"blocks": {}, "blocks_layout": {}, "preview_image_link": {}}},
     )
     site.add("POST", "/docs", {"@id": f"{SITE_URL}/docs/hello", "title": "Hello"})
     site.add(
@@ -691,7 +693,7 @@ def sites(site):
     """Build the sites of two anonymous profiles, recording each client made."""
     made = []
 
-    def build(read_only=False, dry_run=False, docs_read_only=False):
+    def build(read_only=False, dry_run=False, docs_read_only=False, transitions=()):
         def factory(**settings):
             made.append(settings["url"])
             return PloneClient(**{
@@ -701,7 +703,12 @@ def sites(site):
             })
 
         profiles = [
-            Profile(name="blog", url=SITE_URL, description="The blog"),
+            Profile(
+                name="blog",
+                url=SITE_URL,
+                description="The blog",
+                transitions=list(transitions),
+            ),
             Profile(name="docs", url=OTHER_URL, read_only=docs_read_only),
         ]
         return mcp_server.Sites.from_profiles(
@@ -791,6 +798,20 @@ def test_read_only_site_refuses_changes(sites, site):
     assert site.requests == []
     call(server, "delete_content", site="blog", paths=["/news"])
     assert site.last.url.host == "plone.test"
+
+
+def test_site_with_transitions_refuses_others(sites, site):
+    server = mcp_server.build_server(sites(transitions=["submit"]))
+    listed = call(server, "list_sites")["items"]
+    assert listed[0]["transitions"] == ["submit"]
+    assert "transitions" not in listed[1]
+    error = tool_error(
+        server, "run_transition", site="blog", path="/news", transition="publish"
+    )
+    assert error["error"]["type"] == "PloneTransitionError"
+    assert site.requests == []
+    call(server, "run_transition", site="blog", path="/news", transition="submit")
+    assert site.site_path(site.last) == "/news/@workflow/submit"
 
 
 def test_read_only_flag_covers_every_site(sites):

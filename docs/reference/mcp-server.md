@@ -135,6 +135,15 @@ Tools run one at a time per site, so that operations and block edits from severa
 
 The server writes the address it listens on to standard error, and stops on `Ctrl+C` or `SIGTERM`.
 
+Before you deploy the server over HTTP, check each of these.
+
+- It listens on the loopback address, or a proxy that adds TLS stands in front of it.
+- Each person or team that should not share access has its own server and token.
+- In a container, the token comes from `PLONE_CLIENT_MCP_TOKEN`, not from a keyring the container lacks.
+- `--tool` offers only the tools the job needs; {ref}`howto-protect` has sets to start from.
+- Every production site in its profiles is {term}`read-only`, unless the job is to change it.
+- You know how to rotate the token: `plone-client mcp-token generate` replaces the one in the keyring, or you set a new `PLONE_CLIENT_MCP_TOKEN`, which wins; the server reads it only when it starts.
+
 (reference-assistant-server-tool-list)=
 
 ## Tools
@@ -211,6 +220,9 @@ When the credentials of a site were rejected, the instructions warn about it and
 ````
 
 ### Rejected credentials
+
+```{versionadded} 1.0.0a2
+```
 
 Plone answers a wrong password as an anonymous request, so reads still work and only changes fail.
 When a site is configured with a username or token and answers as anonymous, `plone-client mcp` checks each site at startup and writes a warning to standard error: the server still starts.

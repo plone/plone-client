@@ -141,3 +141,21 @@ CASES = [
 def test_requests(client, site, call, method, path, params, body):
     call(client)
     check_request(site, method, path, params, body)
+
+
+USERS = [{"id": "jdoe"}, {"id": "admin"}]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        pytest.param(USERS, id="list-before-restapi-10"),
+        pytest.param(
+            {"@id": "x/@users", "items": USERS, "items_total": 2},
+            id="object-from-restapi-10",
+        ),
+    ],
+)
+def test_list_returns_the_users(client, site, answer):
+    site.add("GET", "/@users", answer)
+    assert client.users.list() == USERS

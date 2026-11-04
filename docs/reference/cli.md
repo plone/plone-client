@@ -112,6 +112,15 @@ When one of them stops part way, the error on standard error also has a `result`
 
 In the group rows, `/` separates the panels of the group's help: Browse, then Write, then Membership or Connection.
 
+(reference-cli-options)=
+
+## Options of each command
+
+<!-- source: docs/_generate/cli_options.py, from the Typer application in src/plone_client/cli/ -->
+
+```{include} ../_generated/cli-commands.md
+```
+
 ## Field values
 
 `create` and `update` merge field values from these options, each one winning over the previous.
@@ -280,15 +289,6 @@ plone-client get /missing
 `delete`, `users delete`, and `groups delete` ask for confirmation.
 Without a terminal they require `--yes`.
 With `--dry-run` they need neither.
-
-(reference-cli-options)=
-
-## Options of each command
-
-<!-- source: docs/_generate/cli_options.py, from the Typer application in src/plone_client/cli/ -->
-
-```{include} ../_generated/cli-commands.md
-```
 
 ## Related
 

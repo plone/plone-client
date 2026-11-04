@@ -92,8 +92,10 @@ Content model, mostly for sites with the Volto frontend:
   `content_types` before setting unusual fields.
 - New items are private until a workflow transition such as `publish` runs.
 
-Changes are refused when the server is read-only. In a dry run, nothing is
-changed: tools return the requests they would have sent.
+Changes are refused when the server is read-only, and a site that lists
+`transitions` in list_sites runs only those workflow transitions. In a dry
+run, nothing is changed: tools return the requests they would have sent,
+with a `warning` when the site would refuse or ignore part of them.
 """
 
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
@@ -231,6 +233,8 @@ class Site:
     :param read_only: Whether changes to it are refused.
     :param factory: Builds its client, on first use.
     :param blocks: Block types that Markdown and HTML become on the site.
+    :param transitions: The only workflow transitions run on the site;
+        ``None`` for all.
     :param lock: Held while a tool works on the site, one tool at a time: the
         client records the requests of an operation in one list, and block
         edits read and write the same item.
@@ -243,6 +247,7 @@ class Site:
     factory: Callable[[], PloneClient] | None = None
     client: PloneClient | None = None
     blocks: dict[str, Any] = field(default_factory=dict)
+    transitions: list[str] | None = None
     lock: threading.Lock = field(
         default_factory=threading.Lock, repr=False, compare=False
     )
@@ -251,15 +256,18 @@ class Site:
         """The site, as ``list_sites`` reports it.
 
         :returns: ``name``, ``url``, ``description``, ``read_only`` and
-            ``blocks``.
+            ``blocks``, and ``transitions`` when only some run.
         """
-        return {
+        summary: dict[str, Any] = {
             "name": self.name,
             "url": self.url,
             "description": self.description,
             "read_only": self.read_only,
             "blocks": self.blocks,
         }
+        if self.transitions is not None:
+            summary["transitions"] = self.transitions
+        return summary
 
 
 class Sites:
@@ -297,6 +305,9 @@ class Sites:
             read_only=client.read_only,
             client=client,
             blocks=dict(client.blocks),
+            transitions=(
+                None if client.transitions is None else sorted(client.transitions)
+            ),
         )
         return cls([site], dry_run=client.dry_run)
 
@@ -337,6 +348,7 @@ class Sites:
                     read_only=locked,
                     factory=builder(profile, locked),
                     blocks=dict(profile.blocks),
+                    transitions=list(profile.transitions) or None,
                 )
             )
         return cls(sites, dry_run=dry_run)

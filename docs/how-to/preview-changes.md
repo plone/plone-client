@@ -39,7 +39,19 @@ export PLONE_CLIENT_PASSWORD=admin
 With both, read-only wins: `-n` on a read-only {term}`profile` is refused with exit code 7, so a read-only site cannot preview a change.
 
 A dry run shows the request, not the site's answer to it, so a request that looks fine can still fail in the real run.
-The exception is a new item: if the site cannot add its type in that folder, the dry run says so in `warning`, and still exits with code 0.
+For new and changed items, the dry run checks what it can, says so in `warning`, and still exits with code 0:
+
+- a new item of a type that the folder cannot add;
+- `blocks` that are not a mapping of block IDs, a block without `@type`, or a `blocks_layout` that does not list them;
+- fields of a new item that its type does not have, which the site would ignore.
+
+```{versionadded} 1.0.0a4
+The `warning` of a dry run on a type that the folder refuses.
+```
+
+```{versionadded} 1.0.0a5
+The `warning` of a dry run on blocks, and on fields the type does not have.
+```
 
 The same change, with each switch:
 

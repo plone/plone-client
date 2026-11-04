@@ -8,6 +8,7 @@ from plone_client.exceptions import PloneNotFoundError
 from plone_client.exceptions import PloneReadOnlyError
 from plone_client.exceptions import PloneServerError
 from plone_client.exceptions import PloneTimeoutError
+from plone_client.exceptions import PloneTransitionError
 
 import base64
 import certifi
@@ -175,6 +176,48 @@ def test_read_only_allows_reads_and_read_only_posts(client_factory, site):
     client.post("/@querystring-search", {"query": []})
     client.post("/news/@querystring-search", {"query": []})
     assert [r.method for r in site.requests] == ["GET", "POST", "POST"]
+
+
+def test_transitions_refuse_others_before_sending(client_factory, site):
+    client = client_factory(transitions=["submit"])
+    with pytest.raises(
+        PloneTransitionError, match="allows only these transitions: submit"
+    ):
+        client.workflow.transition("/news", "publish")
+    with pytest.raises(PloneReadOnlyError):
+        client.request("POST", "/news/@workflow/publish/")
+    assert site.requests == []
+
+
+def test_transitions_allow_the_listed_ones(client_factory, site):
+    client = client_factory(transitions=["submit", "retract"])
+    client.workflow.transition("/news", "submit")
+    client.post("/news", {"title": "Hi"})
+    client.get("/news/@workflow")
+    assert [(r.method, site.site_path(r)) for r in site.requests] == [
+        ("POST", "/news/@workflow/submit"),
+        ("POST", "/news"),
+        ("GET", "/news/@workflow"),
+    ]
+
+
+def test_transitions_are_checked_in_a_dry_run(client_factory, site):
+    client = client_factory(transitions=["submit"], dry_run=True)
+    with pytest.raises(PloneTransitionError):
+        client.workflow.transition("/news", "publish", include_children=True)
+    assert client.dry_run_log == []
+
+
+def test_empty_transitions_refuse_every_transition(client_factory, site):
+    client = client_factory(transitions=[])
+    with pytest.raises(PloneTransitionError, match="transitions: none"):
+        client.workflow.transition("/news", "submit")
+
+
+def test_without_transitions_every_transition_runs(client, site):
+    assert client.transitions is None
+    client.workflow.transition("/news", "publish")
+    assert site.site_path(site.requests[0]) == "/news/@workflow/publish"
 
 
 def test_dry_run_records_changes(client_factory, site):
