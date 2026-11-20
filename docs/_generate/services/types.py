@@ -80,6 +80,10 @@ EXAMPLES = [
         cli="plone-client block-types title --markdown | head -1",
     ),
     Example(
+        "block_types.document_model",
+        'client.block_types.document_model("Document")',
+    ),
+    Example(
         "vocabularies.list",
         "client.vocabularies.list()",
         keep=("@id", "title"),
