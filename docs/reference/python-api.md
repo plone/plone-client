@@ -15,7 +15,8 @@ myst:
 | {mod}`plone_client.operations` | Tasks that take several requests in the right order; see {ref}`reference-operations`. |
 | {mod}`plone_client.blocks` | Build and walk Volto blocks; see {ref}`reference-blocks`. |
 | {mod}`plone_client.mcp_server` | The MCP server; needs the `mcp` extra. |
-| {mod}`plone_client.auth` | Authentication flows for httpx: basic, JWT, and a static token. |
+| {mod}`plone_client.auth` | Authentication flows for httpx: basic, JWT, and a token that can renew itself. |
+| {mod}`plone_client.tokens` | The claims of a JWT, and where a renewed token is kept. |
 | {mod}`plone_client.profiles` | Connection profiles and the configuration file. |
 | {mod}`plone_client.credentials` | Secrets of profiles: keyring, environment variable, or command. |
 | {mod}`plone_client.utils` | UID references and `resolveuid` links. |
@@ -31,6 +32,12 @@ myst:
 
 ```{eval-rst}
 .. automodule:: plone_client.auth
+```
+
+## Tokens
+
+```{eval-rst}
+.. automodule:: plone_client.tokens
 ```
 
 ## Profiles

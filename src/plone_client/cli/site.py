@@ -1,5 +1,9 @@
 """Site commands: information, types, vocabularies, registry, users and groups."""
 
+from .. import credentials
+from ..exceptions import PloneConfigurationError
+from ..tokens import claims
+from ..tokens import expires_at
 from . import panels
 from .output import confirm
 from .output import emit
@@ -11,6 +15,8 @@ from .profile import _read_secret
 from .profile import check_connection
 from .profile import emit_connection
 from .state import get_state
+from datetime import datetime
+from datetime import UTC
 from itertools import islice
 from typing import Annotated
 from typing import Any
@@ -56,6 +62,69 @@ def info(ctx: typer.Context) -> None:
         {"profile": profile.name if profile else None, **result},
         profile.name if profile else "PROFILE",
     )
+
+
+def _check_token(token: str, opaque: bool) -> None:
+    """Refuse a token that cannot work.
+
+    :param token: The token.
+    :param opaque: Accept a token that is not a JWT.
+    :raises PloneConfigurationError: If the token is not a JWT (without
+        ``opaque``), or has expired.
+    """
+    if claims(token) is None:
+        if opaque:
+            return
+        raise PloneConfigurationError(
+            "The token is not a JWT; to store it anyway, without renewal, pass --opaque"
+        )
+    expires = expires_at(token)
+    if expires is not None and expires <= datetime.now(UTC):
+        raise PloneConfigurationError(
+            f"The token expired at {expires.isoformat()}; log in to the site "
+            "again and copy the new one"
+        )
+
+
+@commands.command(rich_help_panel=panels.CONFIGURATION)
+def login(
+    ctx: typer.Context,
+    name: Annotated[
+        str, typer.Argument(help="Token profile; the current one by default.")
+    ] = "",
+    token_stdin: Annotated[
+        bool,
+        typer.Option("--token-stdin", help="Read the token from standard input."),
+    ] = False,
+    opaque: Annotated[
+        bool,
+        typer.Option(
+            "--opaque", help="Accept a token that is not a JWT; it is never renewed."
+        ),
+    ] = False,
+) -> None:
+    """Store a new token for a token profile, and check it.
+
+    For sites where people log in through another provider and have no
+    password: log in with a browser, copy the token, and paste it here. The
+    token is stored in the keyring and renewed before it expires (see
+    --renew-margin of 'profile add').
+    """
+    state = get_state(ctx)
+    config = state.config
+    profile = config.get(name or config.current_name())
+    if profile.auth != "token":
+        raise PloneConfigurationError(
+            f"Profile {profile.name!r} logs in with {profile.auth!r}, not with a "
+            "token; add a token profile with: plone-client profile add NAME "
+            f"--url {profile.url} --auth token"
+        )
+    token = _read_secret(token_stdin, "Token")
+    _check_token(token, opaque)
+    credentials.set_secret(profile, token)
+    state.profile = profile.name
+    result = check_connection(state.client, profile.username)
+    emit_connection(ctx, {"profile": profile.name, **result}, profile.name)
 
 
 @commands.command(rich_help_panel=panels.SITE)

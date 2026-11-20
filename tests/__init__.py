@@ -9,8 +9,10 @@ started with Docker.
 from collections.abc import Callable
 from typing import Any
 
+import base64
 import httpx
 import json
+import time
 
 
 SITE_URL = "http://plone.test/Plone"
@@ -126,6 +128,32 @@ class FakeSite:
         """
         request = request or self.last
         return list(request.url.params.multi_items())
+
+
+def make_jwt(**claims: Any) -> str:
+    """An unsigned JWT with these claims, as tests need one.
+
+    The client never checks signatures, so a fake one is enough.
+
+    :param claims: The payload, such as ``sub`` and ``exp``.
+    :returns: The token.
+    """
+
+    def segment(data: dict[str, Any]) -> str:
+        raw = json.dumps(data).encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    return f"{segment({'alg': 'HS256', 'typ': 'JWT'})}.{segment(claims)}.signature"
+
+
+def expiring_jwt(seconds: float, sub: str = "editor") -> str:
+    """A JWT that expires this many seconds from now.
+
+    :param seconds: Seconds until it expires; negative for an expired token.
+    :param sub: The user it was issued to.
+    :returns: The token.
+    """
+    return make_jwt(sub=sub, exp=int(time.time() + seconds))
 
 
 #: A serialized Document, as the API returns it.

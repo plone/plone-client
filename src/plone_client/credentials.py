@@ -155,6 +155,44 @@ def delete_secret(profile: "Profile") -> bool:
     return True
 
 
+class ProfileTokenStore:
+    """The keyring entry of a token profile, as a token store.
+
+    Lets a renewed token outlive the process that renewed it; see
+    :class:`~plone_client.tokens.TokenStore`.
+
+    :param profile: A profile that keeps its token in the keyring.
+    """
+
+    def __init__(self, profile: "Profile") -> None:
+        self.profile = profile
+
+    def load(self) -> str:
+        """The token in the keyring.
+
+        :returns: The token, or an empty string when there is none or the
+            keyring cannot be read.
+        """
+        try:
+            return get_secret(self.profile)
+        except (PloneConfigurationError, _keyring().errors.KeyringError):
+            return ""
+
+    def save(self, token: str) -> None:
+        """Replace the token in the keyring.
+
+        :param token: The token.
+        :raises PloneConfigurationError: If the profile keeps its secret
+            elsewhere, or the keyring refuses the token.
+        """
+        try:
+            set_secret(self.profile, token)
+        except _keyring().errors.KeyringError as exc:
+            raise PloneConfigurationError(
+                f"Profile {self.profile.name!r}: the keyring refused the token: {exc}"
+            ) from exc
+
+
 #: Environment variable with the token of the MCP server; wins over the keyring.
 MCP_TOKEN_ENV = "PLONE_CLIENT_MCP_TOKEN"
 #: Keyring account of the MCP server's token, under the service ``plone-client``.

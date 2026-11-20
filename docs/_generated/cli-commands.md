@@ -266,6 +266,18 @@ List the versions and workflow history of an item.
 
 Show which site and user the client connects with.
 
+(cli-login)=
+
+### `login`
+
+Store a new token for a token profile, and check it.
+
+| Argument or option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | str | no | — | Token profile; the current one by default. |
+| `--token-stdin` | flag | no | — | Read the token from standard input. |
+| `--opaque` | flag | no | — | Accept a token that is not a JWT; it is never renewed. |
+
 (cli-ls)=
 
 ### `ls`
@@ -377,6 +389,7 @@ Add a profile, and store its secret in the keyring.
 | `--verify` | str | no | — | Verify TLS certificates: true, false, or a CA bundle path. |
 | `--retries` | int | no | — | Times a request is repeated after a network error. |
 | `--backoff` | float | no | — | Base delay in seconds between retries. |
+| `--renew-margin` | float | no | — | With --auth token, renew the token when it expires within these seconds (3600 by default); 0 never renews it. |
 | `--frontend-url` | str | no | — | URL of the Volto frontend, when --url is the backend; used to list the site's blocks. |
 | `--blocks` | str | no | — | Block types that Markdown and HTML become on this site, as JSON, such as '{"codeBlock": true}'. |
 | `--description` | str | no | — | Free text. |

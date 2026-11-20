@@ -44,6 +44,8 @@ from .managers import UsersManager
 from .managers import VocabulariesManager
 from .managers import WorkflowManager
 from .managers import WorkingCopyManager
+from .tokens import claims
+from .tokens import TokenStore
 from collections.abc import Iterable
 from collections.abc import Iterator
 from collections.abc import Mapping
@@ -178,6 +180,12 @@ class PloneClient:
         password.
     :param auth_method: ``basic`` (default) sends the username and password
         on every request; ``jwt`` logs in with ``@login`` and sends the token.
+    :param renew_margin: With a ``token``, renew it with ``@login-renew``
+        when it expires within these seconds; ``None`` (the default) never
+        renews it. See :class:`~plone_client.auth.TokenAuth`.
+    :param token_store: With a ``token``, where a renewed token is saved,
+        and read back when another process renewed it; see
+        :class:`~plone_client.tokens.TokenStore`.
     :param auth: Any :class:`httpx.Auth`; overrides the credentials above.
     :param api_prefix: Traversal prefix of the REST API. ``++api++`` works
         with and without a Volto frontend in front of the backend; use an
@@ -214,6 +222,8 @@ class PloneClient:
         password: str = "",
         token: str = "",
         auth_method: AuthMethod = "basic",
+        renew_margin: float | None = None,
+        token_store: TokenStore | None = None,
         auth: httpx.Auth | None = None,
         api_prefix: str = "++api++",
         timeout: float = 30.0,
@@ -251,6 +261,9 @@ class PloneClient:
                 token=token,
                 method=auth_method,
                 login_url=self.api_url("/@login"),
+                renew_url=self.api_url("/@login-renew"),
+                renew_margin=renew_margin,
+                token_store=token_store,
             )
         self.username = username
         self._password = password
@@ -302,7 +315,8 @@ class PloneClient:
         Reads ``<prefix>URL``, ``<prefix>USERNAME``, ``<prefix>PASSWORD``,
         ``<prefix>TOKEN``, ``<prefix>AUTH_METHOD``, ``<prefix>TIMEOUT``,
         ``<prefix>VERIFY``, ``<prefix>RETRIES``, ``<prefix>BACKOFF``,
-        ``<prefix>READ_ONLY`` and ``<prefix>FRONTEND_URL``; see
+        ``<prefix>RENEW_MARGIN``, ``<prefix>READ_ONLY`` and
+        ``<prefix>FRONTEND_URL``; see
         :func:`~plone_client.profiles.settings_from_env`.
 
         :param prefix: Prefix of the variable names.
@@ -434,6 +448,18 @@ class PloneClient:
             )
             self._token = (answer or {}).get("token", "")
         return self._token
+
+    def token_claims(self) -> dict[str, Any] | None:
+        """What the token the client was given says about itself.
+
+        The claims are read without checking the signature; see
+        :mod:`plone_client.tokens`. After a renewal they describe the new token.
+
+        :returns: The claims (``sub``, ``exp`` and others), or ``None`` when
+            the client was given no token, or the token is not a JWT.
+        """
+        auth = self._http.auth
+        return claims(auth.token) if isinstance(auth, TokenAuth) else None
 
     # ------------------------------------------------------------------
     # Requests

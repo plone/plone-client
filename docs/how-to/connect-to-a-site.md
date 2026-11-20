@@ -40,6 +40,16 @@ If you already have a token, pass it instead of the username and password.
 client = PloneClient(url, token="eyJhbGciOi")
 ```
 
+A token from `plone.restapi` expires, 12 hours after it was issued by default.
+To renew it with `@login-renew` when it expires within an hour, pass `renew_margin` in seconds.
+Read the new token from {meth}`~plone_client.PloneClient.token_claims`, or give the client a {class}`~plone_client.tokens.TokenStore` that keeps it.
+
+```python
+client = PloneClient(url, token="eyJhbGciOi", renew_margin=3600)
+```
+
+A profile with `auth = "token"` renews its token this way by default, and keeps the new one in the keyring; see {ref}`howto-profiles`.
+
 ## Read the environment
 
 In CI jobs and containers, the credentials usually arrive as variables.

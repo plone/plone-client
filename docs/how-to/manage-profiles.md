@@ -56,6 +56,50 @@ plone-client profile add ci --url https://staging.example.org --username bot \
 
 For a site you read anonymously, leave out `--username` and pass `--secret none`.
 
+## Log in with a token
+
+On a site where people log in through another provider, such as GitHub, Google, or the organization's own sign-in, you have no Plone password to store.
+Log in with a browser, copy the JWT that the site gave the browser, and keep it in a token profile.
+On a Volto site, the token is the browser's `auth_token` cookie.
+
+```shell
+plone-client profile add intranet --url https://intranet.example.org --auth token
+```
+
+`profile add` asks for the token and stores it in the {term}`keyring`.
+When the token expires, store a new one with `login`.
+It checks the token, stores it, and prints whom it belongs to and when it expires.
+
+```shell
+plone-client login intranet
+```
+
+```json
+{
+  "profile": "intranet",
+  "url": "https://intranet.example.org",
+  "authenticated": true,
+  "username": "maria",
+  "token_expires": "2026-11-21T09:12:45+00:00",
+  "token_subject": "maria",
+  "credentials_rejected": false,
+  "read_only": false,
+  "plone_version": "6.1.5"
+}
+```
+
+`login` refuses a token that has already expired, and one that is not a JWT unless you pass `--opaque`.
+To pass the token from a script, use `--token-stdin`.
+
+The client renews the token with `@login-renew` when it expires within an hour, and writes the new token to the keyring, so the next command starts with it.
+Change the margin with `--renew-margin SECONDS` on `profile add`, or `renew_margin` in the configuration file; `0` turns renewal off.
+A token that expired cannot be renewed: run `login` again.
+
+```{note}
+Only a token kept in the keyring is written back.
+With `--secret env` or `--secret command`, the renewed token lasts as long as the command or the MCP server that renewed it.
+```
+
 ## Tune the connection
 
 A slow site needs a longer timeout, and a flaky network more retries.
