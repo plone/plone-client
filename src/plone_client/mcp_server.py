@@ -92,9 +92,9 @@ Content model, mostly for sites with the Volto frontend:
 - Some types, such as wiki pages, keep their whole text in one Plate
   document instead: `blocks["main"]`, or `blocks["__somersault__"]` on older
   sites, whose `value` is the list of Plate nodes, starting with the title.
-  `create_page` writes such pages on its own. The block tools refuse them:
-  to change one, read it, edit the nodes, and send the whole `blocks` back
-  with `update_content`.
+  `create_page` writes such pages on its own, and `list_blocks` shows the
+  nodes. The block tools refuse them: to change one, read it, edit the
+  nodes, and send the whole `blocks` back with `update_content`.
 - Folder usually cannot be added, even though `content_types` lists it. For a
   section such as /news, create a Document (Page): it is folderish, and so is
   News Item. `content_types` with `addable_in` lists what a folder can hold,
@@ -1337,7 +1337,8 @@ def _block_tools(add: Callable[[ToolAnnotations], Register], writable: bool) -> 
     @add(READ)
     def list_blocks(client: PloneClient, path: ItemPath) -> dict[str, Any]:
         """The blocks of an item, in order: id, type and the start of their
-        text, with the blocks inside containers.
+        text, with the blocks inside containers and the nodes of a Plate
+        document.
 
         Use the ids with add_blocks, update_block and remove_blocks; read a
         block's full data with get_content and fields ['blocks'].

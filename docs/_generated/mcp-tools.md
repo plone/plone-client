@@ -25,7 +25,7 @@ The column *Read-only site* says whether a server of one read-only site offers t
 | `get_workflow` | `path` | reads | yes | The workflow state of an item and the transitions it can run now. |
 | `get_working_copy` | `path` | reads | yes | The working copy of an item, or the item a working copy belongs to. |
 | `link_translation` | `path`, `translation` | adds | no | Link an existing item as a translation of another. |
-| `list_blocks` | `path` | reads | yes | The blocks of an item, in order: id, type and the start of their text, with the blocks inside containers. |
+| `list_blocks` | `path` | reads | yes | The blocks of an item, in order: id, type and the start of their text, with the blocks inside containers and the nodes of a Plate document. |
 | `list_children` | `path`?, `portal_type`? (list), `limit`? | reads | yes | List the items directly inside a folder, in the folder's order. |
 | `list_sites` | — | reads | yes | The sites this server works on: name, URL, description, and whether changes to it are refused. |
 | `move_content` | `sources` (list), `target` | changes | no | Move items, with everything inside them, into a folder. |

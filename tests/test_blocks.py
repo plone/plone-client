@@ -515,3 +515,33 @@ def test_plate_document(legacy, key):
     page = blocks.plate_document("Text.", title="Notes", legacy=legacy)
     assert page["blocks"][key]["value"][0] == TITLE
     assert page["blocks"][key]["value"][1]["children"] == [{"text": "Text."}]
+
+
+def test_plate_text_joins_elements_with_a_space():
+    code = {
+        "type": "code_block",
+        "children": [
+            {"type": "code_line", "children": [{"text": "uv sync"}]},
+            {"type": "code_line", "children": [{"text": "make test"}]},
+        ],
+    }
+    marked = {"type": "p", "children": [{"text": "a "}, {"bold": True, "text": "b"}]}
+    assert blocks.plate_text(code) == "uv sync make test"
+    assert blocks.plate_text(marked) == "a b"
+    assert blocks.plate_text("not a node") == ""
+
+
+def test_plate_outline_without_links_and_with_width():
+    link = {"type": "a", "url": "/news", "children": [{"text": "news"}]}
+    region = {"@type": "plate", "value": [{"type": "p", "children": [link]}, "junk"]}
+    assert blocks.plate_outline(region, width=3) == [{"type": "p", "text": "ne…"}]
+
+
+def test_outline_lists_the_nodes_of_a_plate_document():
+    page = blocks.plate_blocks([PARAGRAPH], "Notes", legacy=True)
+    found = blocks.outline(page["blocks"], page["blocks_layout"])
+    assert found[-1] == {
+        "id": "__somersault__",
+        "@type": "__somersault__",
+        "nodes": [{"type": "title", "text": "Notes"}, {"type": "p", "text": "Text."}],
+    }

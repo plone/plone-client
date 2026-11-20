@@ -47,6 +47,7 @@ Tell the user before you rely on a block from an add-on.
 ```shell
 plone-client blocks /news/item                 # ids, types, and text, nested blocks included
 plone-client blocks /news/item --links         # the links in each block
+plone-client blocks /wiki/page                 # a Plate document: its nodes, with their type and text
 plone-client get /news/item -f blocks,blocks_layout > page.json   # the full data
 ```
 

@@ -292,6 +292,69 @@ def locate(holder: Mapping[str, Any], block_id: str) -> dict[str, Any] | None:
 TEXT_KEYS = ("plaintext", "title", "headline", "alt")
 
 
+def _shorten(text: str, width: int) -> str:
+    """Text on one line, cut to ``width`` characters with an ellipsis.
+
+    :param text: The text.
+    :param width: Longest text to keep.
+    :returns: The text.
+    """
+    text = " ".join(text.split())
+    return text if len(text) <= width else f"{text[: width - 1]}…"
+
+
+def plate_text(node: Any) -> str:
+    """The text of a Plate node and of the nodes inside it.
+
+    Children are joined as they are, so a link inside a paragraph keeps the
+    text around it; children that are all elements, such as the lines of a
+    code block or the items of a list, are separated by a space.
+
+    :param node: A Plate node.
+    :returns: Its text.
+    """
+    if not isinstance(node, Mapping):
+        return ""
+    if isinstance(node.get("text"), str):
+        return str(node["text"])
+    children = [child for child in node.get("children") or [] if child]
+    elements = bool(children) and all(
+        isinstance(child, Mapping) and "children" in child for child in children
+    )
+    return (" " if elements else "").join(plate_text(child) for child in children)
+
+
+def plate_outline(
+    region: Mapping[str, Any], *, width: int = 60, links: bool = False
+) -> list[dict[str, Any]]:
+    """A short view of the nodes of a Plate document, as :func:`outline`
+    gives of blocks.
+
+    :param region: The block that holds the document, such as
+        ``blocks["main"]``.
+    :param width: Longest text to show.
+    :param links: Also list the links in each node; see :func:`iter_links`.
+    :returns: One entry per top-level node, in order, with its ``type``,
+        the ``@type`` of a Plone block inside the document, maybe ``text``,
+        and, with ``links``, the ``links`` it has.
+    """
+    entries = []
+    for node in region.get("value") or []:
+        if not isinstance(node, Mapping):
+            continue
+        entry: dict[str, Any] = {"type": node.get("type")}
+        if isinstance(node.get("@type"), str):
+            entry["@type"] = node["@type"]
+        text = plate_text(node).strip()
+        if text:
+            entry["text"] = _shorten(text, width)
+        found = list(iter_links(node)) if links else []
+        if found:
+            entry["links"] = found
+        entries.append(entry)
+    return entries
+
+
 def outline(
     blocks: Mapping[str, Any] | None,
     layout: Mapping[str, Any] | None = None,
@@ -304,7 +367,8 @@ def outline(
     :param layout: The matching ``blocks_layout``.
     :param width: Longest text to show.
     :returns: One entry per block, in layout order, with ``id``, ``@type``,
-        maybe ``text``, and ``blocks`` for the blocks inside a container.
+        maybe ``text``, ``blocks`` for the blocks inside a container, and
+        ``nodes`` for a Plate document (see :func:`plate_outline`).
     """
     blocks = blocks or {}
     order = list((layout or {}).get("items") or [])
@@ -318,9 +382,10 @@ def outline(
         text = next(
             (block[key] for key in TEXT_KEYS if isinstance(block.get(key), str)), ""
         )
-        text = " ".join(text.split())
-        if text:
-            entry["text"] = text if len(text) <= width else f"{text[: width - 1]}…"
+        if text.strip():
+            entry["text"] = _shorten(text, width)
+        if is_region(block):
+            entry["nodes"] = plate_outline(block, width=width)
         for holder in (block, block.get("data")):
             if isinstance(holder, dict) and isinstance(holder.get("blocks"), dict):
                 entry["blocks"] = outline(holder["blocks"], holder.get("blocks_layout"))
