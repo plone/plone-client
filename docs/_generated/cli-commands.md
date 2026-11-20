@@ -277,6 +277,10 @@ Store a new token for a token profile, and check it.
 | `name` | str | no | — | Token profile; the current one by default. |
 | `--token-stdin` | flag | no | — | Read the token from standard input. |
 | `--opaque` | flag | no | — | Accept a token that is not a JWT; it is never renewed. |
+| `--browser` | flag | no | — | Log in through the site's login page in a browser, which hands the token over; needs a frontend that supports it. |
+| `--port` | int | no | — | With --browser, the port to wait on at 127.0.0.1; 0 picks a free one. |
+| `--open` | flag | no | — | With --browser, also open the login URL in the default browser; without it, the URL is only printed, for the browser you log in to the site with. |
+| `--timeout` | float | no | `300.0` | With --browser, seconds to wait for the login. |
 
 (cli-ls)=
 

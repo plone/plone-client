@@ -391,6 +391,15 @@ WARNING The token expired at 2026-11-21T09:12:45+00:00; log in again to get a ne
 Log in to the site with a browser, copy the new token, and store it with `plone-client login NAME`; see {ref}`howto-profiles`.
 `info` and `profile test` print `token_expires`, so you can see the next expiry.
 
+## The browser login ends with `No login arrived`
+
+Applies to the command line.
+
+`plone-client login NAME --browser` waited, and the site never sent the token.
+The site's frontend may not support a loopback `return_url` yet: it then logs you in and stays on the site.
+The browser may also run on another machine than the command, which the handoff cannot reach.
+Copy the token and run `plone-client login NAME` without `--browser`; see {ref}`howto-profiles`.
+
 ## A request ends in 409
 
 Applies to the library, the command line, and the MCP server.

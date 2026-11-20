@@ -1,6 +1,8 @@
 """Site commands: information, types, vocabularies, registry, users and groups."""
 
 from .. import credentials
+from ..browser_login import browser_login
+from ..browser_login import DEFAULT_TIMEOUT
 from ..exceptions import PloneConfigurationError
 from ..tokens import claims
 from ..tokens import expires_at
@@ -102,14 +104,46 @@ def login(
             "--opaque", help="Accept a token that is not a JWT; it is never renewed."
         ),
     ] = False,
+    browser: Annotated[
+        bool,
+        typer.Option(
+            "--browser",
+            help="Log in through the site's login page in a browser, which "
+            "hands the token over; needs a frontend that supports it.",
+        ),
+    ] = False,
+    port: Annotated[
+        int,
+        typer.Option(
+            help="With --browser, the port to wait on at 127.0.0.1; 0 picks a free one."
+        ),
+    ] = 0,
+    open_browser: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help="With --browser, also open the login URL in the default "
+            "browser; without it, the URL is only printed, for the browser "
+            "you log in to the site with.",
+        ),
+    ] = False,
+    timeout: Annotated[
+        float,
+        typer.Option(help="With --browser, seconds to wait for the login."),
+    ] = DEFAULT_TIMEOUT,
 ) -> None:
     """Store a new token for a token profile, and check it.
 
     For sites where people log in through another provider and have no
-    password: log in with a browser, copy the token, and paste it here. The
-    token is stored in the keyring and renewed before it expires (see
-    --renew-margin of 'profile add').
+    password. With --browser, the command prints the URL of the site's login
+    page (and opens it with --open), then waits on 127.0.0.1 for the token,
+    which the site hands over once you allow it. Without it, log in with a
+    browser, copy the token, and paste it here. The token is stored in the
+    keyring and renewed before it expires (see --renew-margin of 'profile
+    add').
     """
+    if browser and token_stdin:
+        raise typer.BadParameter("--browser and --token-stdin exclude each other")
     state = get_state(ctx)
     config = state.config
     profile = config.get(name or config.current_name())
@@ -119,7 +153,19 @@ def login(
             "token; add a token profile with: plone-client profile add NAME "
             f"--url {profile.url} --auth token"
         )
-    token = _read_secret(token_stdin, "Token")
+    if browser:
+        token = browser_login(
+            profile.frontend_url or profile.url,
+            port=port,
+            timeout=timeout,
+            open_browser=open_browser,
+            announce=lambda url: typer.echo(
+                f"Open this URL in the browser you log in to the site with:\n{url}",
+                err=True,
+            ),
+        )
+    else:
+        token = _read_secret(token_stdin, "Token")
     _check_token(token, opaque)
     credentials.set_secret(profile, token)
     state.profile = profile.name

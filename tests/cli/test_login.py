@@ -1,5 +1,9 @@
 from .. import expiring_jwt
 from .. import SITE_URL
+from ..test_browser_login import Frontend
+from ..test_browser_login import post
+from plone_client import browser_login
+from plone_client.cli import site as site_commands
 from plone_client.profiles import load_config
 
 import pytest
@@ -140,3 +144,66 @@ def test_renew_margin_zero_keeps_the_token(invoke, memory_keyring, site):
     invoke("info")
     assert memory_keyring.store[KEY] == old
     assert "/@login-renew" not in [site.site_path(r) for r in site.requests]
+
+
+def test_browser_login_stores_the_handed_over_token(invoke, memory_keyring, site):
+    _add_token_profile(invoke, expiring_jwt(-60))
+    token = expiring_jwt(43_200, sub="maria")
+    frontend = Frontend(post(token))
+    site.add("GET", "/@actions", LOGGED_IN)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(browser_login.webbrowser, "open", frontend)
+        run = invoke("login", "sso", "--browser", "--open", "--timeout", "5")
+    assert run.exit_code == 0, run.stderr
+    assert memory_keyring.store[KEY] == token
+    assert run.json["username"] == "maria"
+    assert frontend.url.startswith(f"{SITE_URL}/login?")
+    assert f"\n{frontend.url}\n" in run.stderr
+
+
+def test_browser_login_only_prints_the_url(invoke, memory_keyring, monkeypatch):
+    calls = []
+
+    def fake(site_url, **kwargs):
+        calls.append(kwargs)
+        return expiring_jwt(43_200)
+
+    monkeypatch.setattr(site_commands, "browser_login", fake)
+    _add_token_profile(invoke, expiring_jwt(600))
+    invoke("login", "sso", "--browser")
+    (kwargs,) = calls
+    assert kwargs["open_browser"] is False
+
+
+def test_browser_login_uses_the_frontend_url(invoke, memory_keyring, monkeypatch):
+    calls = []
+
+    def fake(site_url, **kwargs):
+        calls.append((site_url, kwargs))
+        return expiring_jwt(43_200)
+
+    monkeypatch.setattr(site_commands, "browser_login", fake)
+    _add_token_profile(invoke, expiring_jwt(600), "--frontend-url", "https://www.x.org")
+    invoke("login", "sso", "--browser", "--open", "--port", "51701")
+    ((site_url, kwargs),) = calls
+    assert site_url == "https://www.x.org"
+    assert kwargs["port"] == 51701
+    assert kwargs["open_browser"] is True
+
+
+def test_browser_login_checks_the_token(invoke, memory_keyring, monkeypatch):
+    old = expiring_jwt(600)
+    monkeypatch.setattr(
+        site_commands, "browser_login", lambda site_url, **kwargs: expiring_jwt(-60)
+    )
+    _add_token_profile(invoke, old)
+    run = invoke("login", "sso", "--browser")
+    assert run.exit_code == 3
+    assert "The token expired at" in run.error["message"]
+    assert memory_keyring.store[KEY] == old
+
+
+def test_browser_login_excludes_token_stdin(invoke, memory_keyring):
+    _add_token_profile(invoke, expiring_jwt(600))
+    run = invoke("login", "sso", "--browser", "--token-stdin", stdin="x\n")
+    assert run.exit_code == 2
