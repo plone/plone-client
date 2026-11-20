@@ -205,6 +205,14 @@ def add(
             show_default=False,
         ),
     ] = None,
+    plate_type: Annotated[
+        list[str] | None,
+        typer.Option(
+            help="A content type whose pages are one Plate document, for sites "
+            "whose Volto does not say so; repeat it for more types.",
+            show_default=False,
+        ),
+    ] = None,
     timeout: Annotated[
         float | None, typer.Option(help=TIMEOUT_HELP, show_default=False)
     ] = None,
@@ -265,6 +273,8 @@ def add(
         settings["renew_margin"] = renew_margin
     if transition:
         settings["transitions"] = list(transition)
+    if plate_type:
+        settings["plate_types"] = list(plate_type)
     if blocks_setting is not None:
         settings["blocks"] = parse_value(blocks_setting)
     profile = Profile(

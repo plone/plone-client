@@ -216,21 +216,40 @@ def normalize(item: Mapping[str, Any]) -> dict[str, Any]:
     return block
 
 
+#: ``@type`` of the blocks that hold a whole document rather than one piece of
+#: a page: the ``main`` region of the ``plone.plate`` document model
+#: (``plate``), and the ``__somersault__`` block of earlier Plate editors. They
+#: are not part of ``blocks_layout``.
+REGION_TYPES = frozenset({"plate", "__somersault__"})
+
+
+def is_region(block: Any) -> bool:
+    """Whether a block holds a whole document, outside the layout.
+
+    :param block: The block data.
+    :returns: ``True`` for a block whose ``@type`` is in :data:`REGION_TYPES`.
+    """
+    return isinstance(block, Mapping) and block.get("@type") in REGION_TYPES
+
+
 def tidy(
     blocks: Mapping[str, Any], layout: Mapping[str, Any] | None = None
 ) -> dict[str, Any]:
     """``blocks`` and a ``blocks_layout`` that agree with each other.
 
     Layout ids that name no block are dropped, and so are repeated ones;
-    blocks missing from the layout are added at the end. A title block is
-    moved first, where Volto expects it. Other keys of the layout are kept.
+    blocks missing from the layout are added at the end, except regions (see
+    :data:`REGION_TYPES`), which live outside it. A title block is moved
+    first, where Volto expects it. Other keys of the layout are kept.
 
     :param blocks: Block ids and their data.
     :param layout: The ``blocks_layout``, if any.
     :returns: ``blocks`` and ``blocks_layout``, as :func:`build` returns them.
     """
+    listed = list((layout or {}).get("items") or [])
+    missing = [block_id for block_id in blocks if not is_region(blocks[block_id])]
     order: list[str] = []
-    for block_id in [*((layout or {}).get("items") or []), *blocks]:
+    for block_id in [*listed, *missing]:
         if block_id in blocks and block_id not in order:
             order.append(block_id)
     titles = [
@@ -462,6 +481,92 @@ def convert(
         blocks=check_setting(blocks) or None,
     )
     return {"blocks": result["blocks"], "blocks_layout": result["blocks_layout"]}
+
+
+#: Key of the region that holds the document in the ``plone.plate`` model.
+PLATE_REGION = "main"
+#: Key of the block that held the document before ``@plone/plate``
+#: 1.0.0-alpha.27, which reads it as the ``main`` region.
+SOMERSAULT_KEY = "__somersault__"
+
+
+def plate_document(
+    source: str,
+    source_format: SourceFormat = "markdown",
+    *,
+    title: str = "",
+    blocks: BlocksSetting | None = None,
+    legacy: bool = False,
+) -> dict[str, Any]:
+    """A Plate document for Markdown or HTML, in the ``plone.plate`` model.
+
+    The content is one region, ``blocks["main"]``, whose ``@type`` is
+    ``plate`` and whose ``value`` is the list of Plate nodes, starting with
+    the title. There is no ``blocks_layout``: the editor ignores it. Needs
+    ``collective.html2blocks`` 1.0.0b3 or later, whose ``plate`` converter
+    makes the nodes::
+
+        blocks.plate_document("Our year in numbers.", title="Annual report")
+
+    :param source: The Markdown or HTML.
+    :param source_format: ``markdown`` or ``html``.
+    :param title: Title of the content, for the ``title`` node.
+    :param blocks: Which block types to produce; see :data:`BlocksSetting`.
+    :param legacy: Write the format of the editors before
+        ``@plone/plate`` 1.0.0-alpha.27; see :func:`plate_blocks`.
+    :returns: ``blocks``, with the ``main`` region only, or the legacy
+        ``blocks`` and ``blocks_layout``.
+    :raises PloneConfigurationError: If ``collective.html2blocks`` is not
+        installed, or is too old to write Plate.
+    :raises ValueError: If the format is unknown, or for an invalid
+        ``blocks`` setting.
+    """
+    if source_format not in ("markdown", "html"):
+        raise ValueError(f"Unknown source format: {source_format!r}")
+    converter = _converter()
+    convert_to = (
+        converter.markdown_to_blocks
+        if source_format == "markdown"
+        else converter.html_to_blocks
+    )
+    if "plate" not in getattr(converter, "CONVERTERS", ()):
+        raise PloneConfigurationError(
+            "Writing Plate documents needs collective.html2blocks 1.0.0b3 or "
+            "later: pip install -U 'collective.html2blocks>=1.0.0b3'"
+        )
+    found = convert_to(source, converter="plate", blocks=check_setting(blocks) or None)
+    # One block holds the document: "main" from 1.0.0b3, "__somersault__" before
+    nodes = [node for block in found for node in block.get("value", [])]
+    return plate_blocks(nodes, title, legacy=legacy)
+
+
+def plate_blocks(
+    nodes: list[dict[str, Any]], title: str = "", *, legacy: bool = False
+) -> dict[str, Any]:
+    """``blocks`` of a Plate document made of nodes, starting with the title.
+
+    The document is the ``main`` region, whose ``@type`` is ``plate``.
+    Editors before ``@plone/plate`` 1.0.0-alpha.27 read it from the
+    ``__somersault__`` block instead, next to a title block that
+    ``blocks_layout`` lists; ``legacy`` writes that, and newer editors
+    turn it into the ``main`` region when they read it.
+
+    :param nodes: The Plate nodes; a ``title`` node is added in front when
+        the first one is not a title. An empty list makes a page that only
+        has its title.
+    :param title: Text of the added ``title`` node.
+    :param legacy: Write the ``__somersault__`` block.
+    :returns: ``blocks``, with the ``main`` region only; with ``legacy``,
+        ``blocks`` and ``blocks_layout``.
+    """
+    nodes = list(nodes)
+    if not nodes or nodes[0].get("type") != "title":
+        nodes.insert(0, {"type": "title", "children": [{"text": title}]})
+    if legacy:
+        data = build({"@type": "title"})
+        data["blocks"][SOMERSAULT_KEY] = {"@type": SOMERSAULT_KEY, "value": nodes}
+        return data
+    return {"blocks": {PLATE_REGION: {"@type": "plate", "value": nodes}}}
 
 
 def iter_blocks(

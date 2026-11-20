@@ -25,6 +25,12 @@ SERVICE = "@blocks-schema"
 JSON = "application/json"
 MARKDOWN = "text/markdown"
 
+#: Volto's document model: blocks keyed by id, ordered by ``blocks_layout``.
+BLOCKS_MODEL = "plone.blocks"
+#: One Plate document in the ``main`` region, as volto-plate's wiki pages
+#: store it.
+PLATE_MODEL = "plone.plate"
+
 #: Title and ``restricted`` of Volto's core blocks, from its configuration.
 #: ``"context"`` means the block chooser decides per content item.
 CORE_BLOCKS: dict[str, tuple[str, bool | str]] = {
@@ -169,11 +175,14 @@ class BlockTypesManager(BaseManager):
         base = self._resolve(ref).rstrip("/") if ref else ""
         return f"{base}/{SERVICE}" + (f"/{block_id}" if block_id else "")
 
-    def _fetch(self, path: str, accept: str) -> httpx.Response:
+    def _fetch(
+        self, path: str, accept: str, params: dict[str, str] | None = None
+    ) -> httpx.Response:
         """Ask the Volto server, telling a missing service from an error.
 
         :param path: Site path of the service.
         :param accept: Media type to ask for.
+        :param params: Query parameters, such as ``type``.
         :returns: A successful answer of the service.
         :raises BlocksSchemaUnavailable: If the service is not there, or
             the client cannot use it.
@@ -184,7 +193,11 @@ class BlockTypesManager(BaseManager):
         client = self._client
         try:
             response = client.frontend_request(
-                "GET", path, headers={"Accept": accept}, raise_for_status=False
+                "GET",
+                path,
+                headers={"Accept": accept},
+                params=params,
+                raise_for_status=False,
             )
         except PloneConnectionError as error:
             raise BlocksSchemaUnavailable(
@@ -274,6 +287,33 @@ class BlockTypesManager(BaseManager):
             )
             return f"> {data['warning']}\n\n{builtin_markdown(data)}"
         return response.text
+
+    def document_model(
+        self, portal_type: str | None = None, ref: str | None = None
+    ) -> dict[str, Any] | None:
+        """How content of a type, or a content item, stores its blocks.
+
+        Volto 19.8 and later announce it in ``@blocks-schema`` as a document
+        model: :data:`BLOCKS_MODEL` for ``blocks`` and ``blocks_layout``, or
+        another one registered by an add-on, such as :data:`PLATE_MODEL`.
+
+        :param portal_type: A content type, which may have no items yet.
+        :param ref: A content item, or the folder that will hold an item of
+            ``portal_type``.
+        :returns: ``id`` and ``version``, or ``None`` when the site does not
+            say: an older Volto, no ``@blocks-schema``, an anonymous client,
+            or an error of the service.
+        """
+        params = {"type": portal_type} if portal_type else None
+        try:
+            response = self._fetch(self._path(ref, None), JSON, params)
+            found = response.json()
+        except (BlocksSchemaUnavailable, PloneAPIError, ValueError):
+            return None
+        model = found.get("document_model") if isinstance(found, dict) else None
+        if isinstance(model, dict) and isinstance(model.get("id"), str):
+            return {"id": model["id"], "version": model.get("version")}
+        return None
 
     def _builtin_block(self, block_id: str, reason: str) -> dict[str, Any]:
         """A core block, or a not found error.

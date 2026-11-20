@@ -118,6 +118,7 @@ Create a page from Markdown or HTML, converted to blocks.
 | `--no-lead` | flag | no | — | Do not set a lead image. |
 | `--publish` | str | no | — | Run this workflow transition at the end, e.g. publish. |
 | `--blocks` | str | no | — | Block types to produce, as JSON, such as '{"codeBlock": {"style": "light"}, "slateTable": false}'; merged over the profile's. |
+| `--document-model` | str | no | — | How pages store their blocks: plone.blocks, or plone.plate for one Plate document. By default the site says, for sites whose Volto announces it; otherwise the profile's plate types are Plate documents. |
 
 (cli-create-with-files)=
 
@@ -389,6 +390,7 @@ Add a profile, and store its secret in the keyring.
 | `--secret-command` | str | no | — | Command printing the secret, with --secret command. |
 | `--read-only`, `--no-read-only` | flag | no | — | Refuse changes to this site. |
 | `--transition` | str | no | — | The only workflow transition run on this site; repeat it to allow more. Without it, every transition runs. |
+| `--plate-type` | str | no | — | A content type whose pages are one Plate document, for sites whose Volto does not say so; repeat it for more types. |
 | `--timeout` | float | no | — | Seconds to wait for the site. |
 | `--verify` | str | no | — | Verify TLS certificates: true, false, or a CA bundle path. |
 | `--retries` | int | no | — | Times a request is repeated after a network error. |
@@ -683,6 +685,7 @@ Upload a local folder as pages, files and images, keeping its structure.
 | `--hidden` | flag | no | — | Also upload names starting with a dot. |
 | `--publish` | str | no | — | Run this workflow transition at the end, e.g. publish. |
 | `--blocks` | str | no | — | Block types to produce, as JSON, such as '{"codeBlock": {"style": "light"}, "slateTable": false}'; merged over the profile's. |
+| `--document-model` | str | no | — | How pages store their blocks: plone.blocks, or plone.plate for one Plate document. By default the site says, for sites whose Volto announces it; otherwise the profile's plate types are Plate documents. |
 
 (cli-users)=
 

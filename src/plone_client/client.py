@@ -210,6 +210,8 @@ class PloneClient:
     :param blocks: Block types that Markdown and HTML become on this site,
         for :mod:`plone_client.operations`; see
         :data:`plone_client.blocks.BlocksSetting`.
+    :param plate_types: Content types whose pages are one Plate document,
+        for sites whose Volto does not say so in ``@blocks-schema``.
     :param transport: Custom :mod:`httpx` transport, mostly for tests.
     :raises ValueError: If ``url`` is empty, or ``blocks`` has the wrong shape.
     """
@@ -236,6 +238,7 @@ class PloneClient:
         dry_run: bool = False,
         frontend_url: str = "",
         blocks: Mapping[str, Any] | None = None,
+        plate_types: Iterable[str] = (),
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         if not url:
@@ -244,6 +247,9 @@ class PloneClient:
         self.frontend_url = frontend_url.rstrip("/") or self.url
         #: Block types that Markdown and HTML become on this site.
         self.blocks = check_setting(blocks)
+        #: Content types whose pages are one Plate document, when the site
+        #: does not say so itself.
+        self.plate_types = frozenset(plate_types)
         self.api_prefix = api_prefix.strip("/")
         self.retries = retries
         self.backoff = backoff
@@ -586,6 +592,7 @@ class PloneClient:
         ref: str = "/",
         *,
         headers: Mapping[str, str] | None = None,
+        params: Mapping[str, str] | None = None,
         raise_for_status: bool = True,
     ) -> httpx.Response:
         """Send a read request to the Volto frontend, with a Bearer token.
@@ -598,6 +605,7 @@ class PloneClient:
         :param method: ``GET`` or ``HEAD``.
         :param ref: Site path with the service, or a URL of the frontend.
         :param headers: Extra headers for this request.
+        :param params: Query parameters.
         :param raise_for_status: Raise
             :class:`~plone_client.exceptions.PloneAPIError` for error answers.
         :returns: The response.
@@ -612,7 +620,9 @@ class PloneClient:
         url = self.frontend_url if path == "/" else f"{self.frontend_url}{path}"
 
         def send(token: str) -> httpx.Response:
-            request = self._http.build_request(method, url, headers=headers)
+            request = self._http.build_request(
+                method, url, headers=headers, params=params
+            )
             return self._send(request, auth=TokenAuth(token) if token else httpx.Auth())
 
         token = self.token()

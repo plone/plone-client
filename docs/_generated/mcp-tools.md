@@ -16,7 +16,7 @@ The column *Read-only site* says whether a server of one read-only site offers t
 | `copy_content` | `sources` (list), `target` | adds | no | Copy items, with everything inside them, into a folder. |
 | `create_content` | `parent`, `portal_type`, `data`?, `publish`? | adds | no | Create one content item with the given field values. |
 | `create_content_with_files` | `parent`, `portal_type`, `files` (list), `data`?, `lead_image`?, `publish`? | adds | no | Create an item, upload files and images inside it, and set its lead image. |
-| `create_page` | `parent`, `source`, `source_format`?, `portal_type`?, `title`?, `description`?, `data`?, `files`? (list), `lead_image`?, `publish`?, `blocks`? | adds | no | Create a page from Markdown or HTML, converted to Volto blocks. |
+| `create_page` | `parent`, `source`, `source_format`?, `portal_type`?, `title`?, `description`?, `data`?, `files`? (list), `lead_image`?, `publish`?, `blocks`?, `document_model`? | adds | no | Create a page from Markdown or HTML, converted to Volto blocks. |
 | `delete_content` | `paths` (list) | changes | no | Delete content items, and everything inside them. |
 | `get_content` | `path`?, `fields`? (list), `expand`? (list) | reads | yes | Read one content item: its fields, blocks and workflow state. |
 | `get_navigation` | `path`?, `depth`? | reads | yes | The navigation tree of the site, to find where content lives. |
@@ -37,4 +37,4 @@ The column *Read-only site* says whether a server of one read-only site offers t
 | `unlink_translation` | `path`, `language` | changes | no | Remove the link to the translation in a language; both items stay. |
 | `update_block` | `path`, `block_id`, `data`, `replace`? | changes, repeatable | no | Change the data of one block, also inside a container. |
 | `update_content` | `path`, `data` | changes, repeatable | no | Change field values of a content item; other fields are kept. |
-| `upload_tree` | `local_path`, `parent`, `convert_pages`?, `publish`?, `blocks`? | adds | no | Upload a local folder: subfolders become pages, files become File and Image items, keeping the structure. |
+| `upload_tree` | `local_path`, `parent`, `convert_pages`?, `publish`?, `blocks`?, `document_model`? | adds | no | Upload a local folder: subfolders become pages, files become File and Image items, keeping the structure. |

@@ -583,6 +583,22 @@ def test_create_page_tool(client, site):
     not mcp_server.has_html2blocks(),
     reason="collective.html2blocks is not installed",
 )
+def test_create_page_tool_takes_a_document_model(client, site):
+    site.add("POST", "/wiki", {"@id": f"{SITE_URL}/wiki/hello", "title": "Hello"})
+    call(
+        mcp_server.build_server(client),
+        "create_page",
+        parent="/wiki",
+        source="# Hello\n\nText.",
+        document_model="plone.plate",
+    )
+    assert site.body()["blocks"]["main"]["@type"] == "plate"
+
+
+@pytest.mark.skipif(
+    not mcp_server.has_html2blocks(),
+    reason="collective.html2blocks is not installed",
+)
 def test_create_page_tool_takes_a_type_and_files(client, site, tmp_path):
     photo = tmp_path / "lead.png"
     photo.write_bytes(b"\x89PNG\r\n\x1a\n")
@@ -605,8 +621,8 @@ def test_create_page_tool_takes_a_type_and_files(client, site, tmp_path):
         files=[str(photo)],
     )
     assert result["item"]["@id"] == f"{SITE_URL}/docs/hello"
-    assert site.body(site.requests[1])["@type"] == "Post"
-    assert site.body(site.requests[3]) == {"preview_image_link": "u1"}
+    assert site.body(site.sent[1])["@type"] == "Post"
+    assert site.body(site.sent[3]) == {"preview_image_link": "u1"}
     assert result["changed"][0]["fields"] == {
         "preview_image_link": f"{SITE_URL}/docs/hello/lead.png"
     }
@@ -647,7 +663,7 @@ def test_create_page_tool_blocks_setting(client_factory, site):
         server, "create_page", parent="/docs", source=source, blocks={"nope": True}
     )
     assert "Unknown block type nope" in error["error"]["message"]
-    assert len(site.requests) == 2
+    assert len(site.sent) == 2
 
 
 def test_tools_offer_a_blocks_setting(client):

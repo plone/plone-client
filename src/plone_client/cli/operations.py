@@ -72,6 +72,15 @@ BlocksOption = Annotated[
         "merged over the profile's.",
     ),
 ]
+DocumentModelOption = Annotated[
+    str | None,
+    typer.Option(
+        help="How pages store their blocks: plone.blocks, or plone.plate for "
+        "one Plate document. By default the site says, for sites whose Volto "
+        "announces it; otherwise the profile's plate types are Plate documents.",
+        show_default=False,
+    ),
+]
 
 
 def parse_blocks(raw: str | None) -> dict[str, Any] | None:
@@ -117,13 +126,15 @@ def create_page(
     no_lead: NoLeadOption = False,
     publish: PublishOption = None,
     blocks_setting: BlocksOption = None,
+    document_model: DocumentModelOption = None,
 ) -> None:
     """Create a page from Markdown or HTML, converted to blocks.
 
     Files given with --file are uploaded inside the page; the first image is
     its lead image unless --lead or --no-lead says otherwise. --blocks, and
-    the profile's blocks setting, choose the block types. Needs the
-    'markdown' extra, on Python 3.12 or later.
+    the profile's blocks setting, choose the block types. Pages of types
+    that keep one Plate document, such as wiki pages, get one; see
+    --document-model. Needs the 'markdown' extra, on Python 3.12 or later.
     """
     client = get_state(ctx).client
     is_html = html or (
@@ -142,6 +153,7 @@ def create_page(
         lead_image=_lead_image(lead, no_lead),
         publish=publish,
         blocks_setting=parse_blocks(blocks_setting),
+        document_model=document_model,
     )
     emit(ctx, result.to_dict())
 
@@ -216,6 +228,7 @@ def upload_tree(
     ] = False,
     publish: PublishOption = None,
     blocks_setting: BlocksOption = None,
+    document_model: DocumentModelOption = None,
 ) -> None:
     """Upload a local folder as pages, files and images, keeping its structure."""
     client = get_state(ctx).client
@@ -228,5 +241,6 @@ def upload_tree(
         include_hidden=include_hidden,
         publish=publish,
         blocks_setting=parse_blocks(blocks_setting),
+        document_model=document_model,
     )
     emit(ctx, result.to_dict())

@@ -89,6 +89,12 @@ Content model, mostly for sites with the Volto frontend:
   gridBlock may list its own `blocks` the same way. To change a page,
   `list_blocks` shows its block ids; then `add_blocks`, `update_block` and
   `remove_blocks` change only those blocks.
+- Some types, such as wiki pages, keep their whole text in one Plate
+  document instead: `blocks["main"]`, or `blocks["__somersault__"]` on older
+  sites, whose `value` is the list of Plate nodes, starting with the title.
+  `create_page` writes such pages on its own. The block tools refuse them:
+  to change one, read it, edit the nodes, and send the whole `blocks` back
+  with `update_content`.
 - Folder usually cannot be added, even though `content_types` lists it. For a
   section such as /news, create a Document (Page): it is folderish, and so is
   News Item. `content_types` with `addable_in` lists what a folder can hold,
@@ -170,6 +176,14 @@ BlocksChoice = Annotated[
         "options to produce one, false to not, such as "
         '{"codeBlock": {"style": "light"}, "slateTable": false}. Merged over '
         "the site's setting, which the instructions give."
+    ),
+]
+DocumentModel = Annotated[
+    Literal["plone.blocks", "plone.plate"] | None,
+    Field(
+        description="How pages store their content: plone.blocks (blocks and "
+        "blocks_layout), or plone.plate (one Plate document, as wiki pages "
+        "do). Leave it out: the site, or its settings, decide per type."
     ),
 ]
 Blocks = Annotated[
@@ -1230,11 +1244,14 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
             ] = "first",
             publish: Publish = None,
             blocks: BlocksChoice = None,
+            document_model: DocumentModel = None,
         ) -> dict[str, Any]:
             """Create a page from Markdown or HTML, converted to Volto blocks.
 
             Headings, paragraphs, lists, quotes, links, images and tables
-            become blocks. The page also gets title and description blocks.
+            become blocks. The page also gets title and description blocks;
+            a type whose pages are one Plate document, such as a wiki page,
+            gets that document instead, starting with the title.
             Files are uploaded inside the page, and the lead image is stored
             the way the type expects, as create_content_with_files does. The
             type must have blocks.
@@ -1252,6 +1269,7 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
                 lead_image=lead_image,
                 publish=publish,
                 blocks_setting=blocks,
+                document_model=document_model,
             )
             return result.to_dict()
 
@@ -1268,6 +1286,7 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
         ] = False,
         publish: Publish = None,
         blocks: BlocksChoice = None,
+        document_model: DocumentModel = None,
     ) -> dict[str, Any]:
         """Upload a local folder: subfolders become pages, files become File
         and Image items, keeping the structure.
@@ -1279,6 +1298,7 @@ def _operation_tools(add: Callable[[ToolAnnotations], Register]) -> None:
             convert_pages=convert_pages,
             publish=publish,
             blocks_setting=blocks,
+            document_model=document_model,
         )
         return result.to_dict()
 

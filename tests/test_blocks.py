@@ -287,6 +287,26 @@ def test_tidy_without_layout_or_title():
     assert blocks.tidy(found)["blocks_layout"] == {"items": ["a", "b"]}
 
 
+@pytest.mark.parametrize(
+    "region_id,region_type", [("main", "plate"), ("__somersault__", "__somersault__")]
+)
+def test_tidy_keeps_regions_out_of_the_layout(region_id, region_type):
+    found = {
+        "t": {"@type": "title"},
+        region_id: {"@type": region_type, "value": []},
+        "a": {"@type": "slate"},
+    }
+    result = blocks.tidy(found, {"items": ["t"]})
+    assert result["blocks_layout"] == {"items": ["t", "a"]}
+    assert result["blocks"][region_id] == {"@type": region_type, "value": []}
+
+
+def test_tidy_leaves_a_listed_region_where_it_is():
+    found = {"main": {"@type": "plate", "value": []}, "a": {"@type": "slate"}}
+    result = blocks.tidy(found, {"items": ["main"]})
+    assert result["blocks_layout"] == {"items": ["main", "a"]}
+
+
 def nested_page():
     return {
         "blocks": {
@@ -462,3 +482,36 @@ def test_convert_passes_options():
         "python",
         "light",
     )
+
+
+TITLE = {"type": "title", "children": [{"text": "Notes"}]}
+PARAGRAPH = {"type": "p", "children": [{"text": "Text."}]}
+
+
+@pytest.mark.parametrize(
+    "nodes,expected",
+    [([], [TITLE]), ([PARAGRAPH], [TITLE, PARAGRAPH]), ([TITLE], [TITLE])],
+)
+def test_plate_blocks_start_with_the_title(nodes, expected):
+    assert blocks.plate_blocks(nodes, "Notes") == {
+        "blocks": {"main": {"@type": "plate", "value": expected}}
+    }
+
+
+def test_plate_blocks_legacy():
+    page = blocks.plate_blocks([PARAGRAPH], "Notes", legacy=True)
+    (title_id,) = page["blocks_layout"]["items"]
+    assert page["blocks"] == {
+        title_id: {"@type": "title"},
+        "__somersault__": {"@type": "__somersault__", "value": [TITLE, PARAGRAPH]},
+    }
+    # the legacy block stays out of the layout, and tidy keeps it out
+    assert blocks.tidy(page["blocks"], page["blocks_layout"]) == page
+
+
+@needs_html2blocks
+@pytest.mark.parametrize("legacy,key", [(False, "main"), (True, "__somersault__")])
+def test_plate_document(legacy, key):
+    page = blocks.plate_document("Text.", title="Notes", legacy=legacy)
+    assert page["blocks"][key]["value"][0] == TITLE
+    assert page["blocks"][key]["value"][1]["children"] == [{"text": "Text."}]

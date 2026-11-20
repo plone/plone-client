@@ -89,6 +89,15 @@ plone-client create-page /docs install.md --blocks '{"codeBlock": {"style": "dar
 To use a setting for every page of a site, put it in the {term}`profile`'s `blocks` table; a setting passed to one call is merged over it.
 {ref}`reference-configuration-blocks` lists the values.
 
+## Write pages as Plate documents
+
+Some content types keep their page in one Plate document instead of separate blocks, such as the wiki pages of `volto-plate`.
+`create_page` and `upload_tree` write such a type's page as a Plate document, starting with the title, without any change to the call.
+Volto 19.8 and later say which types those are.
+For an older site, list them in the {term}`profile`'s `plate_types`, and their pages are written in the format its editor reads.
+To write the current format to a site that does not say, choose the model for one call with `document_model`, or `--document-model` on the command line.
+{ref}`reference-configuration-document-models` describes both models.
+
 ## Create an item with its images
 
 Pass the files to upload inside the item.

@@ -292,6 +292,27 @@ def test_config_keeps_the_transitions(tmp_path):
     assert "transitions" not in loaded.get("docs").client_settings()
 
 
+def test_config_keeps_the_plate_types(tmp_path):
+    path = tmp_path / "config.toml"
+    config = Config(path)
+    config.add(
+        Profile(name="wiki", url="https://example.org", plate_types=["WikiPage"])
+    )
+    config.add(Profile(name="docs", url="https://example.org"))
+    config.save()
+    loaded = profiles.load_config(path)
+    assert loaded.get("wiki").plate_types == ["WikiPage"]
+    assert loaded.get("wiki").client_settings()["plate_types"] == ["WikiPage"]
+    assert "plate_types" not in loaded.get("docs").summary()
+    assert "plate_types" not in loaded.get("docs").client_settings()
+
+
+@pytest.mark.parametrize("value", ["WikiPage", [""], [1]])
+def test_profile_rejects_bad_plate_types(value):
+    with pytest.raises(PloneConfigurationError, match="plate_types must be a list"):
+        Profile(name="wiki", url="https://example.org", plate_types=value)
+
+
 @pytest.mark.parametrize("value", ["submit", [""], [1]])
 def test_profile_rejects_bad_transitions(value):
     with pytest.raises(PloneConfigurationError, match="transitions must be a list"):
@@ -390,6 +411,14 @@ def test_settings_from_env_transitions():
         "PLONE_CLIENT_TRANSITIONS": "submit, retract,",
     })
     assert settings["transitions"] == ["submit", "retract"]
+
+
+def test_settings_from_env_plate_types():
+    settings = profiles.settings_from_env({
+        "PLONE_CLIENT_URL": "u",
+        "PLONE_CLIENT_PLATE_TYPES": "WikiPage, Note",
+    })
+    assert settings["plate_types"] == ["WikiPage", "Note"]
 
 
 def test_settings_from_env_blocks():

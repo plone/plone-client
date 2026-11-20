@@ -22,6 +22,12 @@ Ids are any unique strings.
 Every id in `blocks` must also be in `blocks_layout.items`.
 A block that is missing from the layout stays stored, and Volto does not show it, although `plone-client blocks` still lists it.
 
+Some content types, such as the wiki pages of `volto-plate`, store their page as one Plate document instead.
+`blocks` then holds a single region, `{"main": {"@type": "plate", "value": [...]}}`, whose `value` is the list of Plate nodes, starting with a `title` node, and there is no `blocks_layout`.
+`create-page` and `upload-tree --pages` write such pages for you: the site says which types use Plate, or the profile's `plate_types` does, and `--document-model plone.plate` forces it.
+Sites with an editor older than `@plone/plate` 1.0.0-alpha.27 keep the document in a `__somersault__` block instead of `main`, next to a title block in `blocks_layout`; `plate_types` writes that format.
+The block tools refuse these pages; to change one, read it, edit the nodes in `value`, and send the whole `blocks` back with `update`.
+
 ## Learn what the site offers
 
 Each site has its own blocks, and each block has its own data, so ask before you write one.

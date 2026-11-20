@@ -111,6 +111,20 @@ class FakeSite:
         """The last request received."""
         return self.requests[-1]
 
+    @property
+    def sent(self) -> list[httpx.Request]:
+        """Requests, without those that look up a document model.
+
+        Creating a page asks the frontend's ``@blocks-schema`` how its type
+        stores blocks, after a ``@login`` for the token it needs.
+        """
+        return [
+            request
+            for request in self.requests
+            if not request.url.path.endswith("/@blocks-schema")
+            and (request.method, self.site_path(request)) != ("POST", "/@login")
+        ]
+
     def body(self, request: httpx.Request | None = None) -> Any:
         """JSON body of a request.
 

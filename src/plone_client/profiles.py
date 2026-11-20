@@ -169,6 +169,8 @@ class Profile:
     :param blocks: Block types that Markdown and HTML become on this site,
         such as ``{"codeBlock": True}``; see
         :data:`plone_client.blocks.BlocksSetting`.
+    :param plate_types: Content types whose pages are one Plate document,
+        for sites whose Volto does not say so in ``@blocks-schema``.
     :param description: Free text, shown by ``plone-client profile list``.
     """
 
@@ -189,6 +191,7 @@ class Profile:
     api_prefix: str = "++api++"
     frontend_url: str = ""
     blocks: dict[str, Any] = field(default_factory=dict)
+    plate_types: list[str] = field(default_factory=list)
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -210,12 +213,14 @@ class Profile:
                 f"Profile {self.name!r}: secret_command is required"
             )
         self._check_connection()
-        if not isinstance(self.transitions, list) or not all(
-            isinstance(item, str) and item for item in self.transitions
-        ):
-            raise PloneConfigurationError(
-                f"Profile {self.name!r}: transitions must be a list of transition ids"
-            )
+        for key, what in (("transitions", "transition"), ("plate_types", "type")):
+            value = getattr(self, key)
+            if not isinstance(value, list) or not all(
+                isinstance(item, str) and item for item in value
+            ):
+                raise PloneConfigurationError(
+                    f"Profile {self.name!r}: {key} must be a list of {what} ids"
+                )
         try:
             self.blocks = check_setting(self.blocks)
         except ValueError as error:
@@ -314,6 +319,8 @@ class Profile:
             settings["blocks"] = dict(self.blocks)
         if self.transitions:
             settings["transitions"] = list(self.transitions)
+        if self.plate_types:
+            settings["plate_types"] = list(self.plate_types)
         secret = self.get_secret()
         if self.auth == "token":
             settings["token"] = secret
@@ -588,7 +595,7 @@ def settings_from_env(
     ``AUTH_METHOD``, ``API_PREFIX``, ``TIMEOUT``, ``VERIFY`` (``true``,
     ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF``,
     ``RENEW_MARGIN`` (seconds; renews ``TOKEN`` in memory), ``READ_ONLY``,
-    ``TRANSITIONS`` (ids separated by commas), ``FRONTEND_URL`` and
+    ``TRANSITIONS`` and ``PLATE_TYPES`` (ids separated by commas), ``FRONTEND_URL`` and
     ``BLOCKS`` (a JSON object), each after the prefix.
     With ``prefix="REMOTE_"``, this reads the ``REMOTE_URL``, ``REMOTE_USER``
     and ``REMOTE_PASSWORD`` variables used by older scripts.
@@ -621,10 +628,11 @@ def settings_from_env(
         settings["verify"] = parse_verify(value("VERIFY"))
     if value("READ_ONLY"):
         settings["read_only"] = _bool(value("READ_ONLY"))
-    if value("TRANSITIONS"):
-        settings["transitions"] = [
-            item.strip() for item in value("TRANSITIONS").split(",") if item.strip()
-        ]
+    for key in ("TRANSITIONS", "PLATE_TYPES"):
+        if value(key):
+            settings[key.lower()] = [
+                item.strip() for item in value(key).split(",") if item.strip()
+            ]
     if value("BLOCKS"):
         settings["blocks"] = _env_blocks(value("BLOCKS"), f"{prefix}BLOCKS")
     return settings
