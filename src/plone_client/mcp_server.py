@@ -252,6 +252,24 @@ def _project(item: dict[str, Any], fields: list[str] | None) -> dict[str, Any]:
     return {key: item[key] for key in fields if key in item}
 
 
+def _login_fields(profile: Profile) -> dict[str, Any]:
+    """What a site needs for the ``login`` tool, from its profile.
+
+    Only a token kept in the keyring can be replaced by the server.
+
+    :param profile: The profile.
+    :returns: ``login_page`` and ``store_token``, or nothing.
+    """
+    if profile.auth != "token" or profile.secret != "keyring":  # noqa: S105
+        return {}
+    from .credentials import set_secret
+
+    return {
+        "login_page": profile.frontend_url or profile.url,
+        "store_token": partial(set_secret, profile),
+    }
+
+
 @dataclass
 class Site:
     """A site the server works on.
@@ -336,11 +354,22 @@ class Sites:
         self.dry_run = dry_run
 
     @classmethod
-    def from_client(cls, client: PloneClient, name: str = "site") -> "Sites":
+    def from_client(
+        cls,
+        client: PloneClient,
+        name: str = "site",
+        *,
+        profile: Profile | None = None,
+        factory: Callable[[], PloneClient] | None = None,
+    ) -> "Sites":
         """One site, served with a client that already exists.
 
         :param client: The client.
         :param name: Name of the site.
+        :param profile: The profile the client comes from, if any. A token
+            profile whose token is in the keyring gets the ``login`` tool,
+            when ``factory`` is given too.
+        :param factory: Builds the client again, as after a ``login``.
         :returns: The sites.
         """
         site = Site(
@@ -348,10 +377,12 @@ class Sites:
             client.url,
             read_only=client.read_only,
             client=client,
+            factory=factory,
             blocks=dict(client.blocks),
             transitions=(
                 None if client.transitions is None else sorted(client.transitions)
             ),
+            **(_login_fields(profile) if profile and factory else {}),
         )
         return cls([site], dry_run=client.dry_run)
 
@@ -381,13 +412,9 @@ class Sites:
 
             return build
 
-        from .credentials import set_secret
-
         sites = []
         for profile in profiles:
             locked = read_only or profile.read_only
-            # Only a token kept in the keyring can be replaced by the server
-            login = profile.auth == "token" and profile.secret == "keyring"  # noqa: S105
             sites.append(
                 Site(
                     profile.name,
@@ -397,8 +424,7 @@ class Sites:
                     factory=builder(profile, locked),
                     blocks=dict(profile.blocks),
                     transitions=list(profile.transitions) or None,
-                    login_page=(profile.frontend_url or profile.url) if login else "",
-                    store_token=partial(set_secret, profile) if login else None,
+                    **_login_fields(profile),
                 )
             )
         return cls(sites, dry_run=dry_run)

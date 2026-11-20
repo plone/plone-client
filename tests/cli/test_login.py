@@ -207,3 +207,30 @@ def test_browser_login_excludes_token_stdin(invoke, memory_keyring):
     _add_token_profile(invoke, expiring_jwt(600))
     run = invoke("login", "sso", "--browser", "--token-stdin", stdin="x\n")
     assert run.exit_code == 2
+
+
+@pytest.mark.parametrize("select", [("-p", "sso"), ("--site", "sso")])
+def test_mcp_offers_login_for_a_token_profile(
+    invoke, memory_keyring, monkeypatch, select
+):
+    pytest.importorskip("mcp")
+    from ..test_mcp_server import tools
+    from plone_client import mcp_server
+
+    served = []
+    monkeypatch.setattr(
+        "plone_client.mcp_server.serve", lambda sites, *args: served.append(sites)
+    )
+    _add_token_profile(invoke, expiring_jwt(-60))
+    flag, name = select
+    args = (flag, name, "mcp") if flag == "-p" else ("mcp", flag, name)
+    run = invoke(*args)
+    assert run.exit_code == 0, run.stderr
+    (sites,) = served
+    assert sites.logins == ["sso"]
+    assert "login" in tools(mcp_server.build_server(sites))
+    # After a login, the client is made again with the token in the keyring
+    site = sites.site("sso")
+    site.store_token(expiring_jwt(43_200, sub="maria"))
+    site.client = None
+    assert sites.client("sso").token_claims()["sub"] == "maria"
