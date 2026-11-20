@@ -377,6 +377,30 @@ keyring.errors.NoKeyringError: No recommended backend was available.
 
 Keep the secret in an environment variable; see {ref}`howto-scripts-ci`.
 
+## The token expired
+
+Applies to the library, the command line, and the MCP server.
+
+A profile with `auth = "token"` renews its token before it expires, but a token that expired cannot be renewed.
+The site then answers `401`, or as anonymous, and `plone-client -v info` logs this warning.
+
+```text
+WARNING The token expired at 2026-11-21T09:12:45+00:00; log in again to get a new one
+```
+
+Log in to the site with a browser, copy the new token, and store it with `plone-client login NAME`, or run `plone-client login NAME --browser`; see {ref}`howto-profiles`.
+In an assistant, ask it to log in again: the MCP server's `login` tool gives a URL to open; see {ref}`reference-assistant-server-login`.
+`info` and `profile test` print `token_expires`, so you can see the next expiry.
+
+## The browser login ends with `No login arrived`
+
+Applies to the command line and the MCP server.
+
+`plone-client login NAME --browser`, or the MCP server's `login` tool, waited, and the site never sent the token.
+The site's frontend may not support a loopback `return_url` yet: it then logs you in and stays on the site.
+The browser may also run on another machine than the command, which the handoff cannot reach.
+Copy the token and run `plone-client login NAME` without `--browser`; see {ref}`howto-profiles`.
+
 ## A request ends in 409
 
 Applies to the library, the command line, and the MCP server.

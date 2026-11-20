@@ -124,7 +124,13 @@ def mcp(
     if not (site or group or every):
         profile = state.selected_profile()
         serve(
-            Sites.from_client(state.client, name=profile.name if profile else "site"),
+            Sites.from_client(
+                state.client,
+                name=profile.name if profile else "site",
+                profile=profile,
+                # After a login, the client is made again with the new token
+                factory=lambda: _client(**state.client_settings()),
+            ),
             tool,
             settings,
         )

@@ -228,7 +228,30 @@ Plone answers a wrong password as an anonymous request, so reads still work and 
 When a site is configured with a username or token and answers as anonymous, `plone-client mcp` checks each site at startup and writes a warning to standard error: the server still starts.
 The same warning is in the instructions, and `site_info` reports `credentials_rejected`.
 A site with no username or token that answers as anonymous is not reported.
-Fix the secret with `plone-client profile set-secret NAME`.
+Fix the secret with `plone-client profile set-secret NAME`, or, for a site that logs in through the browser, with the `login` tool.
+
+(reference-assistant-server-login)=
+
+### Log in again
+
+```{versionadded} 1.0.0a5
+```
+
+A site whose profile has `auth = "token"` and keeps the token in the keyring gets a `login` tool, so the model can renew a login that expired without the user leaving the assistant.
+It uses the same handoff as `plone-client login --browser`, from the profile's `frontend_url` or `url`; see {ref}`howto-profiles`.
+
+1. The first call starts a listener on `127.0.0.1` and returns at once with `status: "started"` and the `url` of the site's login page.
+   The model shows the URL to the user, who opens it in the browser they log in to the site with, logs in, and allows the handoff.
+2. A later call waits up to 20 seconds for the handoff.
+   It returns `status: "waiting"` and the same `url` while nothing has arrived.
+   Once the token has arrived, it stores it in the keyring, makes the site's client again, and returns `status: "logged_in"` with the same report as `site_info`.
+3. When a login ends without a token, because the listener waited five minutes or the server stopped, the next call starts a new one, and its `message` says why the last one ended.
+
+The handed-over token must be a JWT that has not expired.
+With several sites, `login` takes a `site` argument, whose values are the sites that log in this way.
+The server's instructions tell the model when to call it, and a tool that the site answers with `401` on such a site adds a `hint` to its error that points to `login`.
+The listener runs on the computer of the server, so the browser must run there too.
+`login` changes no content, and is offered in every mode.
 
 ## Errors
 

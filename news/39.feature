@@ -1,0 +1,1 @@
+A token profile now renews its JWT with `@login-renew` before it expires, an hour ahead by default (`renew_margin`, `--renew-margin`, `PLONE_CLIENT_RENEW_MARGIN`), and keeps the new token in the keyring. The new `plone-client login NAME` command stores a token copied from a browser, and `info` and `profile test` print when it expires. @ericof

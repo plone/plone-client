@@ -56,6 +56,70 @@ plone-client profile add ci --url https://staging.example.org --username bot \
 
 For a site you read anonymously, leave out `--username` and pass `--secret none`.
 
+## Log in with a token
+
+On a site where people log in through another provider, such as GitHub, Google, or the organization's own sign-in, you have no Plone password to store.
+Log in with a browser, copy the JWT that the site gave the browser, and keep it in a token profile.
+On a Volto site, the token is the browser's `auth_token` cookie.
+
+```shell
+plone-client profile add intranet --url https://intranet.example.org --auth token
+```
+
+`profile add` asks for the token and stores it in the {term}`keyring`.
+When the token expires, store a new one with `login`.
+It checks the token, stores it, and prints whom it belongs to and when it expires.
+
+```shell
+plone-client login intranet
+```
+
+```json
+{
+  "profile": "intranet",
+  "url": "https://intranet.example.org",
+  "authenticated": true,
+  "username": "maria",
+  "token_expires": "2026-11-21T09:12:45+00:00",
+  "token_subject": "maria",
+  "credentials_rejected": false,
+  "read_only": false,
+  "plone_version": "6.1.5"
+}
+```
+
+`login` refuses a token that has already expired, and one that is not a JWT unless you pass `--opaque`.
+To pass the token from a script, use `--token-stdin`.
+
+The client renews the token with `@login-renew` when it expires within an hour, and writes the new token to the keyring, so the next command starts with it.
+Change the margin with `--renew-margin SECONDS` on `profile add`, or `renew_margin` in the configuration file; `0` turns renewal off.
+Keep the margin shorter than the time a token lasts on the site, 12 hours by default: with a longer one, every request renews the token.
+A token that expired cannot be renewed: run `login` again.
+
+### Log in through the browser
+
+If the site's frontend can hand the token over, `login --browser` saves you copying it.
+`volto-authomatic` does once it supports a loopback `return_url`; see [`collective/volto-authomatic#50`](https://github.com/collective/volto-authomatic/issues/50).
+
+```shell
+plone-client login intranet --browser
+```
+
+The command waits on `127.0.0.1` and prints the URL of the site's `/login` page.
+Open it in the browser you log in to the site with, log in as usual, and allow the handoff when the site asks.
+To open it in the default browser instead, pass `--open`.
+The site then sends the token to the waiting command, which checks and stores it, and prints the same report as above.
+
+For a profile whose `url` is the backend, the page comes from `frontend_url`.
+If the browser runs on another machine, the handoff cannot reach the command, so copy the token instead.
+The command gives up after `--timeout` seconds, 300 by default, and `--port` chooses the port to wait on.
+The MCP server offers the same login as its `login` tool, so an assistant can renew a login that expired; see {ref}`reference-assistant-server-login`.
+
+```{note}
+Only a token kept in the keyring is written back.
+With `--secret env` or `--secret command`, the renewed token lasts as long as the command or the MCP server that renewed it.
+```
+
 ## Tune the connection
 
 A slow site needs a longer timeout, and a flaky network more retries.

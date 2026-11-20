@@ -56,6 +56,7 @@ ROOT_ORDER: tuple[str, ...] = (
     "mcp-token",
     # Configuration
     "info",
+    "login",
     "profile",
     "skill",
 )

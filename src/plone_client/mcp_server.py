@@ -25,17 +25,24 @@ such as ``plone://blog/blocks``, for users to attach to a conversation.
 from . import __version__
 from . import blocks
 from . import operations
+from .browser_login import PendingLogin
 from .client import PloneClient
 from .exceptions import error_payload
+from .exceptions import PloneAuthenticationError
 from .exceptions import PloneClientError
 from .exceptions import PloneConfigurationError
 from .exceptions import PloneNotFoundError
 from .profiles import Profile
+from .tokens import claims
+from .tokens import expires_at
 from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Iterator
 from dataclasses import dataclass
 from dataclasses import field
+from datetime import datetime
+from datetime import UTC
+from functools import partial
 from functools import wraps
 from importlib.util import find_spec
 from mcp.server.mcpserver import MCPServer
@@ -98,7 +105,29 @@ run, nothing is changed: tools return the requests they would have sent,
 with a `warning` when the site would refuse or ignore part of them.
 """
 
+LOGIN_INSTRUCTIONS = """\
+The server logs in{where} with a token the site hands over after a login in
+the user's browser. When a tool reports that the token was refused or has
+expired, call `login`: it returns a URL. Show the whole URL to the user, and
+ask them to open it in the browser they log in to the site with, log in, and
+allow the handoff. When they say they are done, call `login` again: it stores
+the new token and reports the user. Never open the URL yourself.
+"""
+LOGIN_HINT = (
+    "The site refused the token, or it has expired. Call the login tool to "
+    "log in again through the user's browser."
+)
+#: Seconds a ``login`` call waits for a handoff that has not arrived yet.
+LOGIN_WAIT = 20.0
+
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+# Stores a new token on this computer; the site itself is not changed
+LOGIN = ToolAnnotations(
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=False,
+    open_world_hint=True,
+)
 CREATE = ToolAnnotations(
     read_only_hint=False, destructive_hint=False, open_world_hint=False
 )
@@ -223,6 +252,24 @@ def _project(item: dict[str, Any], fields: list[str] | None) -> dict[str, Any]:
     return {key: item[key] for key in fields if key in item}
 
 
+def _login_fields(profile: Profile) -> dict[str, Any]:
+    """What a site needs for the ``login`` tool, from its profile.
+
+    Only a token kept in the keyring can be replaced by the server.
+
+    :param profile: The profile.
+    :returns: ``login_page`` and ``store_token``, or nothing.
+    """
+    if profile.auth != "token" or profile.secret != "keyring":  # noqa: S105
+        return {}
+    from .credentials import set_secret
+
+    return {
+        "login_page": profile.frontend_url or profile.url,
+        "store_token": partial(set_secret, profile),
+    }
+
+
 @dataclass
 class Site:
     """A site the server works on.
@@ -238,6 +285,11 @@ class Site:
     :param lock: Held while a tool works on the site, one tool at a time: the
         client records the requests of an operation in one list, and block
         edits read and write the same item.
+    :param login_page: URL of the frontend whose ``/login`` page hands a
+        token over, for the ``login`` tool.
+    :param store_token: Stores a token from the ``login`` tool where the
+        client reads it; ``None`` when the site has no such login.
+    :param pending: The browser login that is waiting, if any.
     """
 
     name: str
@@ -251,6 +303,16 @@ class Site:
     lock: threading.Lock = field(
         default_factory=threading.Lock, repr=False, compare=False
     )
+    login_page: str = ""
+    store_token: Callable[[str], None] | None = field(
+        default=None, repr=False, compare=False
+    )
+    pending: PendingLogin | None = field(default=None, repr=False, compare=False)
+
+    @property
+    def can_login(self) -> bool:
+        """Whether the ``login`` tool can store a new token for the site."""
+        return self.store_token is not None and bool(self.login_page)
 
     def summary(self) -> dict[str, Any]:
         """The site, as ``list_sites`` reports it.
@@ -292,11 +354,22 @@ class Sites:
         self.dry_run = dry_run
 
     @classmethod
-    def from_client(cls, client: PloneClient, name: str = "site") -> "Sites":
+    def from_client(
+        cls,
+        client: PloneClient,
+        name: str = "site",
+        *,
+        profile: Profile | None = None,
+        factory: Callable[[], PloneClient] | None = None,
+    ) -> "Sites":
         """One site, served with a client that already exists.
 
         :param client: The client.
         :param name: Name of the site.
+        :param profile: The profile the client comes from, if any. A token
+            profile whose token is in the keyring gets the ``login`` tool,
+            when ``factory`` is given too.
+        :param factory: Builds the client again, as after a ``login``.
         :returns: The sites.
         """
         site = Site(
@@ -304,10 +377,12 @@ class Sites:
             client.url,
             read_only=client.read_only,
             client=client,
+            factory=factory,
             blocks=dict(client.blocks),
             transitions=(
                 None if client.transitions is None else sorted(client.transitions)
             ),
+            **(_login_fields(profile) if profile and factory else {}),
         )
         return cls([site], dry_run=client.dry_run)
 
@@ -349,6 +424,7 @@ class Sites:
                     factory=builder(profile, locked),
                     blocks=dict(profile.blocks),
                     transitions=list(profile.transitions) or None,
+                    **_login_fields(profile),
                 )
             )
         return cls(sites, dry_run=dry_run)
@@ -402,12 +478,20 @@ class Sites:
             site.client = site.factory()
         return site.client
 
+    @property
+    def logins(self) -> list[str]:
+        """Names of the sites the ``login`` tool can log in to, in order."""
+        return [site.name for site in self._sites.values() if site.can_login]
+
     def close(self) -> None:
-        """Close the clients that were created."""
+        """Close the clients that were created, and stop waiting logins."""
         for site in self._sites.values():
             if site.client is not None:
                 site.client.close()
                 site.client = None
+            if site.pending is not None:
+                site.pending.cancel()
+                site.pending = None
 
 
 def rejected_sites(sites: Sites) -> list[str]:
@@ -462,11 +546,21 @@ def _instructions(sites: Sites, rejected: tuple[str, ...] = ()) -> str:
             )
     if sites.dry_run:
         lines.append("This server is in a dry run.\n")
+    logins = sites.logins
+    if logins:
+        names = ", ".join(f"`{name}`" for name in logins)
+        where = f" for {names}" if sites.multiple else ""
+        lines.append(LOGIN_INSTRUCTIONS.format(where=where))
     for name in rejected:
+        fix = (
+            "Call `login` to log in again."
+            if name in logins
+            else f"Ask the user to run `plone-client profile set-secret {name}`."
+        )
         lines.append(
             f"Warning: the credentials of `{name}` were rejected. The site answers "
-            "as anonymous, so reads show only public content and changes fail. "
-            f"Ask the user to run `plone-client profile set-secret {name}`.\n"
+            f"as anonymous, so reads show only public content and changes fail. "
+            f"{fix}\n"
         )
     return "\n".join(lines)
 
@@ -501,12 +595,128 @@ def _per_site(sites: Sites, func: Tool) -> Tool:
         # The SDK runs tools in worker threads, so calls can overlap
         site = sites.site(kwargs.pop("site", None))
         with site.lock:
-            return func(sites.client(site.name), **kwargs)
+            try:
+                return func(sites.client(site.name), **kwargs)
+            except PloneAuthenticationError as error:
+                if not site.can_login:
+                    raise
+                payload = error_payload(error)
+                payload["error"]["hint"] = LOGIN_HINT
+                raise ToolError(json.dumps(payload)) from error
 
     wrapper.__signature__ = signature.replace(  # type: ignore[attr-defined]
         parameters=parameters
     )
     return wrapper
+
+
+def _add_login(server: MCPServer, sites: Sites, wanted: set[str] | None) -> list[str]:
+    """Add the ``login`` tool when a site logs in through the browser.
+
+    :param server: The server.
+    :param sites: The sites.
+    :param wanted: Names of the only tools to offer, or ``None``.
+    :returns: ``["login"]`` when the server can offer it, else ``[]``.
+    """
+    if not sites.logins:
+        return []
+    if wanted is None or "login" in wanted:
+        tool = tool_errors(_login_tool(sites))
+        server.add_tool(tool, name="login", annotations=LOGIN)
+    return ["login"]
+
+
+def _check_handed_over(token: str) -> None:
+    """Refuse a handed-over token that cannot work.
+
+    :param token: The token.
+    :raises PloneConfigurationError: If it is not a JWT, or has expired.
+    """
+    if claims(token) is None:
+        raise PloneConfigurationError("The site handed over a token that is not a JWT")
+    expires = expires_at(token)
+    if expires is not None and expires <= datetime.now(UTC):
+        raise PloneConfigurationError(
+            f"The site handed over a token that expired at {expires.isoformat()}"
+        )
+
+
+def _login_tool(sites: Sites) -> Tool:
+    """The ``login`` tool, for the sites whose token comes from a browser login.
+
+    The first call starts a listener on ``127.0.0.1`` and returns the URL of
+    the site's login page at once, for the model to show to the user. A later
+    call waits a little for the handoff, stores the token in the keyring, and
+    makes the site's client again, so the next tool uses the token.
+
+    :param sites: The sites.
+    :returns: The tool, with a ``site`` argument when there are several sites.
+    """
+
+    def login(site: str | None = None) -> dict[str, Any]:
+        """Log in to the site again through the user's browser.
+
+        Use it when a tool reports that the token was refused or has expired.
+        The first call returns a URL: show the whole URL to the user, and ask
+        them to open it in the browser they log in to the site with, log in,
+        and allow the handoff. Then call login again; it stores the new token
+        and reports the user. Works only when the user's browser runs on the
+        same computer as this server.
+        """
+        found = sites.site(site)
+        if not found.can_login or found.store_token is None:
+            raise PloneConfigurationError(
+                f"Site {found.name!r} does not log in through the browser; ask "
+                f"the user to run: plone-client profile set-secret {found.name}"
+            )
+        pending = found.pending
+        if pending is not None and not pending.wait(LOGIN_WAIT):
+            return {
+                "status": "waiting",
+                "url": pending.url,
+                "message": "No login has arrived yet. Ask the user to open the "
+                "URL, log in and allow the handoff, then call login again.",
+            }
+        if pending is None or not pending.token:
+            note = f"{pending.error}. " if pending is not None else ""
+            found.pending = PendingLogin(found.login_page)
+            return {
+                "status": "started",
+                "url": found.pending.url,
+                "message": f"{note}Show this URL to the user, and ask them to open "
+                "it in the browser they log in to the site with, log in, and "
+                "allow the handoff. Then call login again.",
+            }
+        found.pending = None
+        _check_handed_over(pending.token)
+        from .cli.profile import check_connection
+
+        with found.lock:
+            found.store_token(pending.token)
+            if found.client is not None:
+                found.client.close()
+                found.client = None
+            client = sites.client(found.name)
+            return {"status": "logged_in", **check_connection(client, client.username)}
+
+    if not sites.multiple:
+        signature = inspect.signature(login)
+        login.__signature__ = signature.replace(  # type: ignore[attr-defined]
+            parameters=[]
+        )
+        return login
+    names = tuple(sites.logins)
+    parameter = inspect.Parameter(
+        "site",
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        annotation=Annotated[
+            Literal[names], Field(description="Site to log in to again.")
+        ],
+    )
+    login.__signature__ = inspect.signature(login).replace(  # type: ignore[attr-defined]
+        parameters=[parameter]
+    )
+    return login
 
 
 def has_html2blocks() -> bool:
@@ -582,6 +792,7 @@ def build_server(
             return {"items": [site.summary() for site in sites]}
 
         server.add_tool(list_sites, annotations=READ)
+    known.extend(_add_login(server, sites, wanted))
     _read_tools(add(READ), add(ACTION))
     _block_tools(add, sites.writable)
     _workflow_tools(add)

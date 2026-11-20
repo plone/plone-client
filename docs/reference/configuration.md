@@ -71,6 +71,7 @@ The file never holds a secret.
 | `verify` | boolean or string | `true` | Verify TLS certificates. A string is the path of a CA bundle, a file or a directory, used instead of the default certificates; `~` is expanded. |
 | `retries` | integer | `3` | Times a request is repeated after a network error, or after a `429`, `502`, `503`, or `504` answer to a request that is safe to repeat. `0` turns retries off. |
 | `backoff` | number | `0.5` | Base delay in seconds between retries; it doubles after each one. |
+| `renew_margin` | number | `3600.0` | With `auth = "token"`, renew the token with `@login-renew` when it expires within these seconds; `0` never renews it. A token kept in the keyring is replaced by the renewed one. |
 | `api_prefix` | string | `++api++` | Traversal prefix of the REST API. |
 | `frontend_url` | string | `""` | URL of the Volto frontend, for the services Volto serves itself, such as `@blocks-schema`. Empty means `url`, which is right when `url` is the frontend. |
 | `blocks` | table | `{}` | Block types that Markdown and HTML become; see below. |
@@ -188,6 +189,7 @@ It then reads the settings from the environment variables below.
 | `PLONE_CLIENT_VERIFY` | `false` to skip TLS verification, or the path of a CA bundle. |
 | `PLONE_CLIENT_RETRIES` | Times a request is repeated; `0` turns retries off. |
 | `PLONE_CLIENT_BACKOFF` | Base delay in seconds between retries. |
+| `PLONE_CLIENT_RENEW_MARGIN` | Renew `PLONE_CLIENT_TOKEN` when it expires within these seconds; the renewed token is kept in memory only. |
 | `PLONE_CLIENT_READ_ONLY` | `true` to refuse every change. |
 | `PLONE_CLIENT_TRANSITIONS` | The only workflow transitions to run, separated by commas, such as `submit,retract`. |
 | `PLONE_CLIENT_FRONTEND_URL` | URL of the Volto frontend, when `PLONE_CLIENT_URL` is the backend. |

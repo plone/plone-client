@@ -9,6 +9,7 @@ from ..profiles import DEFAULT_KEYS
 from ..profiles import parse_verify
 from ..profiles import Profile
 from ..profiles import SECRET_VALUES
+from ..tokens import expiry
 from . import panels
 from .output import emit
 from .output import parse_value
@@ -82,22 +83,33 @@ def check_connection(client: PloneClient, username: str = "") -> dict[str, Any]:
     Credentials are rejected when the client has a username or a token and
     the site still answers as anonymous; without any, anonymous is expected.
 
+    A client with a JWT also reports when the token expires and whom it was
+    issued to; the user is taken from the token when no username is set.
+
     :param client: The client.
     :param username: Login name the client uses.
-    :returns: URL, whether the client is authenticated, the user, whether the
-        credentials were rejected and, when visible, the Plone version.
+    :returns: URL, whether the client is authenticated, the user, the
+        token's expiry and subject (for a JWT), whether the credentials were
+        rejected and, when visible, the Plone version.
     """
     actions = client.navigation.actions(categories=["user"])
     authenticated = any(
         action.get("id") == "logout" for action in actions.get("user", [])
     )
+    token = client.token_claims()
+    subject = token.get("sub") if token else None
+    subject = subject if isinstance(subject, str) and subject else None
     result: dict[str, Any] = {
         "url": client.url,
         "authenticated": authenticated,
-        "username": username if authenticated else None,
-        "credentials_rejected": client.has_credentials and not authenticated,
-        "read_only": client.read_only,
+        "username": (username or subject) if authenticated else None,
     }
+    if token is not None:
+        expires = expiry(token)
+        result["token_expires"] = expires.isoformat() if expires else None
+        result["token_subject"] = subject
+    result["credentials_rejected"] = client.has_credentials and not authenticated
+    result["read_only"] = client.read_only
     try:
         result["plone_version"] = client.system.system().get("plone_version")
     except PloneAPIError:
@@ -205,6 +217,14 @@ def add(
     backoff: Annotated[
         float | None, typer.Option(help=BACKOFF_HELP, show_default=False)
     ] = None,
+    renew_margin: Annotated[
+        float | None,
+        typer.Option(
+            help="With --auth token, renew the token when it expires within "
+            "these seconds (3600 by default); 0 never renews it.",
+            show_default=False,
+        ),
+    ] = None,
     frontend_url: Annotated[
         str,
         typer.Option(
@@ -241,6 +261,8 @@ def add(
     settings = _connection_settings(timeout, verify, retries, backoff)
     if read_only:
         settings["read_only"] = True
+    if renew_margin is not None:
+        settings["renew_margin"] = renew_margin
     if transition:
         settings["transitions"] = list(transition)
     if blocks_setting is not None:

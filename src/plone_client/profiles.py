@@ -160,6 +160,9 @@ class Profile:
     :param retries: Times a request is repeated after a network error or an
         overloaded site; see :class:`~plone_client.PloneClient`.
     :param backoff: Base delay in seconds between retries.
+    :param renew_margin: With ``auth = "token"``, renew the token with
+        ``@login-renew`` when it expires within these seconds; ``0`` never
+        renews it. A token kept in the keyring is replaced by the renewed one.
     :param api_prefix: Traversal prefix of the REST API.
     :param frontend_url: URL of the Volto frontend, when ``url`` is the
         backend; used for services that Volto serves (``@blocks-schema``).
@@ -182,6 +185,7 @@ class Profile:
     verify: bool | str = True
     retries: int = 3
     backoff: float = 0.5
+    renew_margin: float = 3600.0
     api_prefix: str = "++api++"
     frontend_url: str = ""
     blocks: dict[str, Any] = field(default_factory=dict)
@@ -220,7 +224,8 @@ class Profile:
         self.frontend_url = self.frontend_url.rstrip("/")
 
     def _check_connection(self) -> None:
-        """Check ``verify``, ``timeout``, ``retries`` and ``backoff``.
+        """Check ``verify``, ``timeout``, ``retries``, ``backoff`` and
+        ``renew_margin``.
 
         :raises PloneConfigurationError: If a value is invalid.
         """
@@ -228,7 +233,7 @@ class Profile:
             raise PloneConfigurationError(
                 f"Profile {self.name!r}: verify must be true, false or a CA bundle path"
             )
-        for key in ("timeout", "retries", "backoff"):
+        for key in ("timeout", "retries", "backoff", "renew_margin"):
             value = getattr(self, key)
             if isinstance(value, bool) or not isinstance(value, int | float):
                 raise PloneConfigurationError(
@@ -312,6 +317,12 @@ class Profile:
         secret = self.get_secret()
         if self.auth == "token":
             settings["token"] = secret
+            if secret and self.renew_margin:
+                settings["renew_margin"] = self.renew_margin
+                if self.secret == "keyring":
+                    from .credentials import ProfileTokenStore
+
+                    settings["token_store"] = ProfileTokenStore(self)
         elif not self.anonymous:
             settings.update(
                 username=self.username, password=secret, auth_method=self.auth
@@ -575,7 +586,8 @@ def settings_from_env(
 
     Reads ``URL``, ``USERNAME`` (or ``USER``), ``PASSWORD``, ``TOKEN``,
     ``AUTH_METHOD``, ``API_PREFIX``, ``TIMEOUT``, ``VERIFY`` (``true``,
-    ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF``, ``READ_ONLY``,
+    ``false`` or a CA bundle path), ``RETRIES``, ``BACKOFF``,
+    ``RENEW_MARGIN`` (seconds; renews ``TOKEN`` in memory), ``READ_ONLY``,
     ``TRANSITIONS`` (ids separated by commas), ``FRONTEND_URL`` and
     ``BLOCKS`` (a JSON object), each after the prefix.
     With ``prefix="REMOTE_"``, this reads the ``REMOTE_URL``, ``REMOTE_USER``
@@ -619,7 +631,8 @@ def settings_from_env(
 
 
 def _env_numbers(value: Callable[[str], str], prefix: str) -> dict[str, Any]:
-    """``timeout``, ``retries`` and ``backoff`` read from the environment.
+    """``timeout``, ``retries``, ``backoff`` and ``renew_margin`` read from
+    the environment.
 
     :param value: Reads a variable, by its name after the prefix.
     :param prefix: Prefix of the variable names, for the message.
@@ -627,7 +640,13 @@ def _env_numbers(value: Callable[[str], str], prefix: str) -> dict[str, Any]:
     :raises PloneConfigurationError: If one is not a number.
     """
     settings: dict[str, Any] = {}
-    for name, kind in (("TIMEOUT", float), ("RETRIES", int), ("BACKOFF", float)):
+    numbers: tuple[tuple[str, type[float] | type[int]], ...] = (
+        ("TIMEOUT", float),
+        ("RETRIES", int),
+        ("BACKOFF", float),
+        ("RENEW_MARGIN", float),
+    )
+    for name, kind in numbers:
         if value(name):
             try:
                 settings[name.lower()] = kind(value(name))

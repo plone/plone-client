@@ -266,6 +266,22 @@ List the versions and workflow history of an item.
 
 Show which site and user the client connects with.
 
+(cli-login)=
+
+### `login`
+
+Store a new token for a token profile, and check it.
+
+| Argument or option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | str | no | — | Token profile; the current one by default. |
+| `--token-stdin` | flag | no | — | Read the token from standard input. |
+| `--opaque` | flag | no | — | Accept a token that is not a JWT; it is never renewed. |
+| `--browser` | flag | no | — | Log in through the site's login page in a browser, which hands the token over; needs a frontend that supports it. |
+| `--port` | int | no | — | With --browser, the port to wait on at 127.0.0.1; 0 picks a free one. |
+| `--open` | flag | no | — | With --browser, also open the login URL in the default browser; without it, the URL is only printed, for the browser you log in to the site with. |
+| `--timeout` | float | no | `300.0` | With --browser, seconds to wait for the login. |
+
 (cli-ls)=
 
 ### `ls`
@@ -377,6 +393,7 @@ Add a profile, and store its secret in the keyring.
 | `--verify` | str | no | — | Verify TLS certificates: true, false, or a CA bundle path. |
 | `--retries` | int | no | — | Times a request is repeated after a network error. |
 | `--backoff` | float | no | — | Base delay in seconds between retries. |
+| `--renew-margin` | float | no | — | With --auth token, renew the token when it expires within these seconds (3600 by default); 0 never renews it. |
 | `--frontend-url` | str | no | — | URL of the Volto frontend, when --url is the backend; used to list the site's blocks. |
 | `--blocks` | str | no | — | Block types that Markdown and HTML become on this site, as JSON, such as '{"codeBlock": true}'. |
 | `--description` | str | no | — | Free text. |

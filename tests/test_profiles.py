@@ -1,4 +1,5 @@
 from pathlib import Path
+from plone_client import credentials
 from plone_client import profiles
 from plone_client.exceptions import PloneConfigurationError
 from plone_client.profiles import Config
@@ -45,6 +46,8 @@ def test_default_config_path_home(monkeypatch, tmp_path):
         ({"retries": 1.5}, "retries must be a whole number"),
         ({"retries": True}, "retries must be a number"),
         ({"backoff": -0.5}, "backoff must be positive"),
+        ({"renew_margin": -1}, "renew_margin must be positive"),
+        ({"renew_margin": "60"}, "renew_margin must be a number"),
         ({"blocks": ["codeBlock"]}, "blocks setting must be a mapping"),
         ({"blocks": {"codeBlock": "yes"}}, "codeBlock must be true, false"),
     ],
@@ -97,7 +100,12 @@ def test_profile_anonymous(kwargs, anonymous):
             {"username": "editor", "auth": "jwt"},
             {"username": "editor", "password": "s3cret", "auth_method": "jwt"},
         ),
-        ({"auth": "token"}, {"token": "s3cret"}),
+        ({"auth": "token"}, {"token": "s3cret", "renew_margin": 3600.0}),
+        (
+            {"auth": "token", "renew_margin": 600},
+            {"token": "s3cret", "renew_margin": 600},
+        ),
+        ({"auth": "token", "renew_margin": 0}, {"token": "s3cret"}),
         (
             {"frontend_url": "https://www.example.org/"},
             {"frontend_url": "https://www.example.org"},
@@ -124,6 +132,24 @@ def test_profile_client_settings(monkeypatch, kwargs, expected):
         "read_only": False,
     }
     assert profile.client_settings() == {**base, **expected}
+
+
+def test_token_profile_in_the_keyring_gets_a_token_store(memory_keyring):
+    profile = Profile(name="sso", url="https://example.org", auth="token")
+    credentials.set_secret(profile, "first")
+    settings = profile.client_settings()
+    store = settings["token_store"]
+    assert isinstance(store, credentials.ProfileTokenStore)
+    assert store.load() == "first"
+    store.save("second")
+    assert credentials.get_secret(profile) == "second"
+
+
+def test_token_store_without_a_token_loads_nothing(memory_keyring):
+    store = credentials.ProfileTokenStore(
+        Profile(name="sso", url="https://example.org", auth="token")
+    )
+    assert store.load() == ""
 
 
 @pytest.mark.parametrize(
@@ -313,6 +339,7 @@ def test_settings_from_env():
             "PC_VERIFY": "false",
             "PC_RETRIES": "5",
             "PC_BACKOFF": "1.5",
+            "PC_RENEW_MARGIN": "120",
             "PC_READ_ONLY": "yes",
             "PC_FRONTEND_URL": "https://www.example.org",
         },
@@ -330,6 +357,7 @@ def test_settings_from_env():
         "verify": False,
         "retries": 5,
         "backoff": 1.5,
+        "renew_margin": 120.0,
         "read_only": True,
     }
 
@@ -342,7 +370,7 @@ def test_settings_from_env_ca_bundle():
     assert settings["verify"] == "/etc/ssl/ca.pem"
 
 
-@pytest.mark.parametrize("name", ["TIMEOUT", "RETRIES", "BACKOFF"])
+@pytest.mark.parametrize("name", ["TIMEOUT", "RETRIES", "BACKOFF", "RENEW_MARGIN"])
 def test_settings_from_env_numbers(name):
     with pytest.raises(PloneConfigurationError, match=f"{name} must be a number"):
         profiles.settings_from_env({
