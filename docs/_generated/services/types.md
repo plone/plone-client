@@ -779,6 +779,39 @@ Authorization: Bearer TOKEN
 "## Title (`title`)"
 ```
 
+### `client.block_types.document_model`
+
+How content of a type, or a content item, stores its blocks.
+
+See {meth}`~plone_client.managers.block_types.BlockTypesManager.document_model`.
+
+Calls `GET /@blocks-schema`.
+
+`````{tab-set}
+:sync-group: service-example
+
+````{tab-item} Python
+:sync: python
+
+```python
+client.block_types.document_model("Document")
+```
+````
+
+````{tab-item} HTTP
+:sync: http
+
+```http
+GET /@blocks-schema?type=Document HTTP/1.1
+Host: localhost:3000
+Accept: application/json
+Authorization: Bearer TOKEN
+```
+````
+`````
+
+The site answers `200`, and the method returns `None`.
+
 ## `client.vocabularies`
 
 {class}`~plone_client.managers.types.VocabulariesManager`.

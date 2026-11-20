@@ -75,6 +75,7 @@ The file never holds a secret.
 | `api_prefix` | string | `++api++` | Traversal prefix of the REST API. |
 | `frontend_url` | string | `""` | URL of the Volto frontend, for the services Volto serves itself, such as `@blocks-schema`. Empty means `url`, which is right when `url` is the frontend. |
 | `blocks` | table | `{}` | Block types that Markdown and HTML become; see below. |
+| `plate_types` | list of strings | `[]` | Content types whose pages are one Plate document, such as `["WikiPage"]`, for sites whose Volto does not say so itself; their pages are written in the format of editors older than `@plone/plate` 1.0.0-alpha.27. See {ref}`reference-configuration-document-models`. |
 | `description` | string | `""` | Free text, shown by `plone-client profile list` and by the MCP server's `list_sites` tool. |
 
 Profile names start with a letter or a digit and contain only letters, digits, `_`, `.`, and `-`.
@@ -111,6 +112,38 @@ Without a setting, code becomes `slate` text, and tables, images, videos, maps, 
 
 A setting passed to one call, `--blocks` on the command line, the `blocks` argument of an MCP tool, or `blocks_setting` in Python, is merged over the profile's: for each block type it names, its value replaces the profile's.
 An unknown block type or option is refused before any request is sent, with exit code 2 on the command line.
+
+(reference-configuration-document-models)=
+
+## Document models
+
+```{versionadded} 1.0.0a5
+```
+
+A content type stores its page in one of two document models.
+
+`plone.blocks`
+:   Blocks keyed by id, ordered by `blocks_layout`: what Volto pages use.
+
+`plone.plate`
+:   One Plate document in `blocks["main"]`, starting with the title, without `blocks_layout`: what the wiki pages of `volto-plate` use.
+
+`create-page` and `upload-tree` write each page in the model of its type, found in this order:
+
+1.  The model chosen for the call: `--document-model` on the command line, the `document_model` argument of an MCP tool, or `document_model` in Python.
+2.  The model the site announces in `@blocks-schema`, which Volto 19.8 and later do.
+3.  `plone.plate` for the types listed in `plate_types`, in the format of the editors before `@plone/plate` 1.0.0-alpha.27, which do not announce document models: the document goes in a `__somersault__` block, next to a title block that `blocks_layout` lists.
+    Newer editors move it to the `main` region when they read the page.
+4.  `plone.blocks`.
+
+```toml
+[profiles.intranet]
+url = "https://intranet.example.org"
+plate_types = ["WikiPage"]
+```
+
+Writing Plate documents needs `collective.html2blocks` 1.0.0b3 or later.
+The block functions and MCP tools, such as `add_blocks` and `update_block`, refuse a page that is one Plate document; replace the whole document with `update_content`, or `plone-client update`, instead.
 
 ## Defaults
 
@@ -193,6 +226,7 @@ It then reads the settings from the environment variables below.
 | `PLONE_CLIENT_READ_ONLY` | `true` to refuse every change. |
 | `PLONE_CLIENT_TRANSITIONS` | The only workflow transitions to run, separated by commas, such as `submit,retract`. |
 | `PLONE_CLIENT_FRONTEND_URL` | URL of the Volto frontend, when `PLONE_CLIENT_URL` is the backend. |
+| `PLONE_CLIENT_PLATE_TYPES` | The `plate_types` setting, separated by commas, such as `WikiPage,Note`. |
 | `PLONE_CLIENT_BLOCKS` | The `blocks` setting as a JSON object, such as `{"codeBlock": true}`; see {ref}`reference-configuration-blocks`. |
 
 These are read by the command line only.

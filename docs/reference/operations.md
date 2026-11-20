@@ -18,8 +18,8 @@ An {term}`operation` of {mod}`plone_client.operations` is a task of several requ
 | Function | Requests, in order |
 |---|---|
 | {func}`~plone_client.operations.create_with_files` | `GET @types/<type>`, create the item, one upload per file, `PATCH preview_image_link` when the type keeps its lead image there, the transition, and `GET` of the item. |
-| {func}`~plone_client.operations.create_page` | Create the page, one upload per file and `PATCH preview_image_link` when the lead image goes there, then the transition and `GET` of the page. |
-| {func}`~plone_client.operations.upload_tree` | `GET` of the folder, then one create or upload per entry, depth first, and a transition after each new page. |
+| {func}`~plone_client.operations.create_page` | `GET @blocks-schema?type=<type>` from the frontend, after a `@login` for its token, unless a document model is chosen; then create the page, one upload per file and `PATCH preview_image_link` when the lead image goes there, then the transition and `GET` of the page. |
+| {func}`~plone_client.operations.upload_tree` | `GET @blocks-schema?type=<type>` for the folder type, and for `Document` with `convert_pages`, unless a document model is chosen; `GET` of the folder, then one create or upload per entry, depth first, and a transition after each new page. |
 | {func}`~plone_client.operations.copy_items`, {func}`~plone_client.operations.move_items` | `GET` of the folder, a `@search` count per item, `@copy` or `@move`, and a `@search` count per new item. |
 | {func}`~plone_client.operations.add_blocks`, {func}`~plone_client.operations.update_block`, {func}`~plone_client.operations.remove_blocks`, {func}`~plone_client.operations.set_blocks` | `GET` of the item, then one `PATCH` with all its `blocks` and `blocks_layout`. They take no lock, so a change someone else saves between the two is lost. |
 

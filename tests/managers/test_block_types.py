@@ -115,6 +115,48 @@ def test_list_falls_back_to_the_core_blocks(client, token_site, setup, reason):
     assert title["restricted"] == "context"
 
 
+PLATE = {"id": "plone.plate", "version": 1}
+
+
+def test_document_model_of_a_type(client, token_site):
+    token_site.add("GET", SERVICE, {**LISTING, "document_model": PLATE})
+    assert client.block_types.document_model("WikiPage") == PLATE
+    assert token_site.params() == [("type", "WikiPage")]
+
+
+def test_document_model_of_an_item(client, token_site):
+    token_site.add(
+        "GET",
+        "/Plone/wiki/page/@blocks-schema",
+        {**LISTING, "document_model": PLATE},
+    )
+    assert client.block_types.document_model(ref="/wiki/page") == PLATE
+    assert token_site.params() == []
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        LISTING,  # Volto before 19.8 does not announce it
+        {**LISTING, "document_model": "plone.plate"},
+        {**LISTING, "document_model": {"version": 1}},
+    ],
+)
+def test_document_model_unknown(client, token_site, answer):
+    token_site.add("GET", SERVICE, answer)
+    assert client.block_types.document_model("WikiPage") is None
+
+
+def test_document_model_without_the_service(client, token_site):
+    token_site.add_callable("GET", SERVICE, _html)
+    assert client.block_types.document_model("WikiPage") is None
+
+
+def test_document_model_when_the_service_fails(client, token_site):
+    token_site.add("GET", SERVICE, {"message": "boom"}, status=500)
+    assert client.block_types.document_model("WikiPage") is None
+
+
 def test_anonymous_clients_fall_back(client_factory, site):
     site.add("GET", SERVICE, status=401)
     with client_factory(username="", password="") as client:

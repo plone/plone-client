@@ -16,6 +16,12 @@ Content model, mostly for sites with the Volto frontend:
   gridBlock may list its own `blocks` the same way. To change a page,
   `list_blocks` shows its block ids; then `add_blocks`, `update_block` and
   `remove_blocks` change only those blocks.
+- Some types, such as wiki pages, keep their whole text in one Plate
+  document instead: `blocks["main"]`, or `blocks["__somersault__"]` on older
+  sites, whose `value` is the list of Plate nodes, starting with the title.
+  `create_page` writes such pages on its own, and `list_blocks` shows the
+  nodes. The block tools refuse them: to change one, read it, edit the
+  nodes, and send the whole `blocks` back with `update_content`.
 - Folder usually cannot be added, even though `content_types` lists it. For a
   section such as /news, create a Document (Page): it is folderish, and so is
   News Item. `content_types` with `addable_in` lists what a folder can hold,

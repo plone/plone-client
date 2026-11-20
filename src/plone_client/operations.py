@@ -34,6 +34,8 @@ from . import blocks
 from .exceptions import PloneAPIError
 from .exceptions import PloneClientError
 from .exceptions import PloneOperationError
+from .managers.block_types import BLOCKS_MODEL
+from .managers.block_types import PLATE_MODEL
 from .managers.files import file_data
 from collections.abc import Callable
 from collections.abc import Iterable
@@ -410,6 +412,30 @@ def split_title(source: str, source_format: blocks.SourceFormat) -> tuple[str, s
     return title, source[match.end() :].lstrip("\n")
 
 
+def _page_title(
+    source: str,
+    source_format: blocks.SourceFormat,
+    title: str | None,
+    default_title: str,
+) -> tuple[str, str]:
+    """The title of a page, and the content left once a heading became it.
+
+    :param source: The Markdown or HTML.
+    :param source_format: ``markdown`` or ``html``.
+    :param title: The given title, if any.
+    :param default_title: Title when there is neither ``title`` nor a
+        leading heading.
+    :returns: The title, and the source.
+    :raises ValueError: If there is no title.
+    """
+    if not title:
+        title, source = split_title(source, source_format)
+    title = title or default_title
+    if not title:
+        raise ValueError("A title is needed: pass one, or start with a # heading")
+    return title, source
+
+
 def page_data(
     source: str,
     source_format: blocks.SourceFormat = "markdown",
@@ -418,12 +444,16 @@ def page_data(
     description: str | None = None,
     default_title: str = "",
     blocks_setting: blocks.BlocksSetting | None = None,
+    document_model: str = BLOCKS_MODEL,
 ) -> dict[str, Any]:
     """Field values of a page made from Markdown or HTML.
 
-    The page gets a title block, a description block and the converted
-    content. Without a title, the leading level 1 heading is the title, and
-    is not repeated in the content.
+    In the ``plone.blocks`` model, the page gets a title block, a
+    description block and the converted content. In the ``plone.plate``
+    model, it gets one Plate document that starts with the title; see
+    :func:`~plone_client.blocks.plate_document`. Without a title, the
+    leading level 1 heading is the title, and is not repeated in the
+    content.
 
     :param source: The Markdown or HTML.
     :param source_format: ``markdown`` or ``html``.
@@ -433,20 +463,29 @@ def page_data(
         leading heading, such as the name of the file.
     :param blocks_setting: Which block types the content becomes; see
         :func:`~plone_client.blocks.convert`.
-    :returns: ``title``, maybe ``description``, ``blocks`` and
-        ``blocks_layout``.
+    :param document_model: ``plone.blocks`` or ``plone.plate``; see
+        :func:`resolve_document_model`.
+    :returns: ``title``, maybe ``description``, ``blocks`` and, in the
+        ``plone.blocks`` model, ``blocks_layout``.
     :raises ValueError: If there is no title, or ``blocks_setting`` is
         invalid.
     :raises PloneConfigurationError: If ``collective.html2blocks`` is missing.
     """
-    if not title:
-        title, source = split_title(source, source_format)
-    title = title or default_title
-    if not title:
-        raise ValueError("A title is needed: pass one, or start with a # heading")
+    title, source = _page_title(source, source_format, title, default_title)
     data: dict[str, Any] = {"title": title}
     if description:
         data["description"] = description
+    if _check_model(document_model, LEGACY_PLATE_MODEL) != BLOCKS_MODEL:
+        data.update(
+            blocks.plate_document(
+                source,
+                source_format,
+                title=title,
+                blocks=blocks_setting,
+                legacy=document_model == LEGACY_PLATE_MODEL,
+            )
+        )
+        return data
     data.update(
         blocks.convert(
             source,
@@ -456,6 +495,62 @@ def page_data(
         )
     )
     return data
+
+
+#: Document models that pages can be written in.
+DOCUMENT_MODELS = (BLOCKS_MODEL, PLATE_MODEL)
+#: ``plone.plate`` as editors before ``@plone/plate`` 1.0.0-alpha.27
+#: store it, in the ``__somersault__`` block; those sites do not announce
+#: document models.
+LEGACY_PLATE_MODEL = "plone.plate:somersault"
+
+
+def _check_model(model: str, *more: str) -> str:
+    """A document model that pages can be written in.
+
+    :param model: The model id.
+    :param more: Other ids to accept, such as :data:`LEGACY_PLATE_MODEL`.
+    :returns: The model id.
+    :raises ValueError: If plone-client cannot write it.
+    """
+    if model not in (*DOCUMENT_MODELS, *more):
+        raise ValueError(
+            f"Unknown document model {model!r}: use {' or '.join(DOCUMENT_MODELS)}"
+        )
+    return model
+
+
+def resolve_document_model(
+    client: "PloneClient", portal_type: str, chosen: str | None = None
+) -> str:
+    """The document model that pages of a content type are written in.
+
+    The chosen model wins. Otherwise the site says, when its Volto
+    announces document models in ``@blocks-schema`` (Volto 19.8 and
+    later). A site that does not runs an editor older than ``@plone/plate``
+    1.0.0-alpha.27, so the client's ``plate_types`` are written in the format
+    it reads, :data:`LEGACY_PLATE_MODEL`, and other types as blocks.
+
+    :param client: The client.
+    :param portal_type: The content type.
+    :param chosen: ``plone.blocks`` or ``plone.plate``, to skip the lookup.
+    :returns: ``plone.blocks``, ``plone.plate`` or :data:`LEGACY_PLATE_MODEL`.
+    :raises ValueError: If the chosen model, or the one the site announces,
+        is one that plone-client cannot write.
+    """
+    if chosen:
+        return _check_model(chosen)
+    found = client.block_types.document_model(portal_type)
+    if found is not None:
+        if found["id"] not in DOCUMENT_MODELS:
+            raise ValueError(
+                f"{portal_type} keeps its content in the {found['id']!r} "
+                "document model, which plone-client cannot write"
+            )
+        return str(found["id"])
+    if portal_type in client.plate_types:
+        return LEGACY_PLATE_MODEL
+    return BLOCKS_MODEL
 
 
 def _blocks_setting(
@@ -485,6 +580,7 @@ def create_page(
     lead_image: LeadImage = "first",
     publish: str | None = None,
     blocks_setting: blocks.BlocksSetting | None = None,
+    document_model: str | None = None,
 ) -> OperationResult:
     """Create a page from Markdown or HTML, converted to blocks.
 
@@ -492,7 +588,8 @@ def create_page(
     extra (Python 3.12 or later). Files are uploaded inside the page as in
     :func:`create_with_files`, and the lead image is set the same way. The
     block types come from the client's ``blocks``, with ``blocks_setting``
-    merged over it block type by block type.
+    merged over it block type by block type. The page is written in the
+    document model of its type; see :func:`resolve_document_model`.
 
     :param client: The client.
     :param parent: Path or URL of the folder.
@@ -509,15 +606,22 @@ def create_page(
     :param publish: Workflow transition to run at the end.
     :param blocks_setting: Which block types the content becomes; see
         :func:`~plone_client.blocks.convert`.
+    :param document_model: ``plone.blocks`` or ``plone.plate``; found
+        for ``portal_type`` by default.
     :returns: The result; ``item`` is the new page.
     :raises ValueError: If there is no title, a file is missing, the lead
         image is not an image or cannot be stored by the type, or the blocks
-        setting is invalid. Nothing is sent then.
+        setting or document model is invalid. Nothing that changes the
+        site is sent then.
     :raises PloneConfigurationError: If ``collective.html2blocks`` is missing.
     :raises PloneOperationError: If a request fails.
     """
     paths = _check_files(files)
     lead = _pick_lead(paths, lead_image)
+    # checked before the document model is looked up on the site
+    title, source = _page_title(source, source_format, title, "")
+    setting = _blocks_setting(client, blocks_setting)
+    model = resolve_document_model(client, portal_type, document_model)
     body = {
         **(data or {}),
         **page_data(
@@ -525,7 +629,8 @@ def create_page(
             source_format,
             title=title,
             description=description,
-            blocks_setting=_blocks_setting(client, blocks_setting),
+            blocks_setting=setting,
+            document_model=model,
         ),
     }
     with _operation(client, "create_page") as result:
@@ -558,6 +663,7 @@ def _folder_body(
     convert_pages: bool,
     include_hidden: bool,
     blocks_setting: Mapping[str, Any],
+    model: str,
 ) -> tuple[dict[str, Any], Path | None]:
     """Field values of the page made for a folder.
 
@@ -565,6 +671,7 @@ def _folder_body(
     :param convert_pages: Use its index file, if any, as content.
     :param include_hidden: Whether hidden files are uploaded.
     :param blocks_setting: Which block types the content becomes.
+    :param model: Document model of the folder type.
     :returns: The values, and the index file used.
     """
     if convert_pages:
@@ -576,13 +683,16 @@ def _folder_body(
                     PAGE_FORMATS[index.suffix.lower()],
                     default_title=directory.name,
                     blocks_setting=blocks_setting,
+                    document_model=model,
                 )
                 return {"id": slug(directory.name), **body}, index
-    return {
-        "id": slug(directory.name),
-        "title": directory.name,
-        **blocks.build(blocks.title(), blocks.description()),
-    }, None
+    if model != BLOCKS_MODEL:
+        empty = blocks.plate_blocks(
+            [], directory.name, legacy=model == LEGACY_PLATE_MODEL
+        )
+    else:
+        empty = blocks.build(blocks.title(), blocks.description())
+    return {"id": slug(directory.name), "title": directory.name, **empty}, None
 
 
 def upload_tree(
@@ -595,6 +705,7 @@ def upload_tree(
     include_hidden: bool = False,
     publish: str | None = None,
     blocks_setting: blocks.BlocksSetting | None = None,
+    document_model: str | None = None,
 ) -> OperationResult:
     """Upload the contents of a local folder, keeping its structure.
 
@@ -607,7 +718,8 @@ def upload_tree(
     :func:`page_data`), and a folder's ``index.md``, ``README.md`` or
     ``index.html`` becomes the content of the folder's own page. This needs
     the ``markdown`` extra. The block types come from the client's
-    ``blocks``, with ``blocks_setting`` merged over it.
+    ``blocks``, with ``blocks_setting`` merged over it. Pages are written
+    in the document model of their type; see :func:`resolve_document_model`.
 
     :param client: The client.
     :param source: Local folder.
@@ -620,15 +732,21 @@ def upload_tree(
         ``publish``; files and images follow their folder.
     :param blocks_setting: Which block types pages become; see
         :func:`~plone_client.blocks.convert`.
+    :param document_model: ``plone.blocks`` or ``plone.plate`` for every
+        page; found for each type by default.
     :returns: The result; each created entry names its local ``source``.
-    :raises ValueError: If ``source`` is not a folder, or, with
-        ``convert_pages``, the blocks setting is invalid. Nothing is sent then.
+    :raises ValueError: If ``source`` is not a folder, the document model
+        is invalid, or, with ``convert_pages``, the blocks setting is
+        invalid. Nothing that changes the site is sent then.
     :raises PloneOperationError: If a request fails.
     """
     root = Path(source).expanduser()
     if not root.is_dir():
         raise ValueError(f"Not a folder: {root}")
     setting = _blocks_setting(client, blocks_setting) if convert_pages else {}
+    models = {folder_type: resolve_document_model(client, folder_type, document_model)}
+    if convert_pages and "Document" not in models:
+        models["Document"] = resolve_document_model(client, "Document", document_model)
     with _operation(client, "upload_tree") as result:
         parent_path = client.content.resolve(parent)
         client.content.get(parent_path, include_items=False)  # it must exist
@@ -643,6 +761,7 @@ def upload_tree(
             publish=publish,
             skip=None,
             blocks_setting=setting,
+            models=models,
         )
     return result
 
@@ -659,6 +778,7 @@ def _upload_folder(
     publish: str | None,
     skip: Path | None,
     blocks_setting: Mapping[str, Any],
+    models: Mapping[str, str],
 ) -> None:
     """Upload the entries of a local folder into a folder of the site.
 
@@ -672,6 +792,7 @@ def _upload_folder(
     :param publish: Transition for new pages.
     :param skip: Index file already used for the folder's page.
     :param blocks_setting: Which block types pages become, validated.
+    :param models: Document model of each type that pages are made of.
     """
     entries = sorted(directory.iterdir(), key=lambda path: path.name.lower())
     for path in entries:
@@ -679,7 +800,11 @@ def _upload_folder(
             continue
         if path.is_dir():
             body, index = _folder_body(
-                path, convert_pages, include_hidden, blocks_setting
+                path,
+                convert_pages,
+                include_hidden,
+                blocks_setting,
+                models[folder_type],
             )
             answer = client.content.create(parent, folder_type, body)
             entry = _created(
@@ -700,6 +825,7 @@ def _upload_folder(
                 publish=publish,
                 skip=index,
                 blocks_setting=blocks_setting,
+                models=models,
             )
         elif convert_pages and path.suffix.lower() in PAGE_FORMATS:
             body = {
@@ -709,6 +835,7 @@ def _upload_folder(
                     PAGE_FORMATS[path.suffix.lower()],
                     default_title=path.stem,
                     blocks_setting=blocks_setting,
+                    document_model=models["Document"],
                 ),
             }
             answer = client.content.create(parent, "Document", body)
@@ -828,7 +955,8 @@ def _edit_blocks(
     :param edit: Changes ``blocks`` and ``blocks_layout`` in place, and
         returns what changed, for the result.
     :returns: The result; ``item`` has an outline of the saved blocks.
-    :raises ValueError: If the item has no blocks, or the change is refused.
+    :raises ValueError: If the item has no blocks, keeps its content in one
+        Plate document, or the change is refused.
     :raises PloneOperationError: If a request fails.
     """
     with _operation(client, name) as result:
@@ -836,6 +964,15 @@ def _edit_blocks(
         item = client.content.get(path, include_items=False)
         if not isinstance(item.get("blocks"), dict):
             raise ValueError(f"{path} has no blocks")
+        regions = [key for key, b in item["blocks"].items() if blocks.is_region(b)]
+        if regions:
+            # The editor shows only the document, so other blocks are ignored
+            raise ValueError(
+                f"{path} keeps its content in one Plate document "
+                f"({', '.join(regions)}), which the block tools do not edit "
+                "yet; replace the whole document with update_content, or edit "
+                "it in the browser"
+            )
         data = {
             "blocks": copy.deepcopy(item["blocks"]),
             "blocks_layout": copy.deepcopy(item.get("blocks_layout") or {}),

@@ -24,6 +24,24 @@ def test_create_page_from_stdin(invoke, site):
 
 
 @needs_html2blocks
+def test_create_page_with_a_document_model(invoke, site):
+    site.add("POST", "/wiki", {"@id": f"{SITE_URL}/wiki/hello", "title": "Hello"})
+    run = invoke(
+        "create-page", "/wiki", "-", "--document-model", "plone.plate", stdin="# Hello"
+    )
+    assert run.exit_code == 0, run.stderr
+    assert list(site.body()["blocks"]) == ["main"]
+    assert all("@blocks-schema" not in r.url.path for r in site.requests)
+
+
+def test_create_page_with_an_unknown_document_model(invoke, site):
+    run = invoke("create-page", "/wiki", "-", "--document-model", "x", stdin="# Hi")
+    assert run.exit_code != 0
+    assert "Unknown document model 'x'" in run.error["message"]
+    assert site.requests == []
+
+
+@needs_html2blocks
 def test_create_page_from_an_html_file(invoke, site, tmp_path):
     source = tmp_path / "page.html"
     source.write_text("<h1>From HTML</h1><p>Text</p>")
@@ -31,7 +49,7 @@ def test_create_page_from_an_html_file(invoke, site, tmp_path):
     assert run.exit_code == 0, run.stderr
     assert run.json["dry_run"] is True
     assert run.json["item"]["title"] == "From HTML"
-    assert {r.method for r in site.requests} <= {"GET"}
+    assert {r.method for r in site.sent} <= {"GET"}
 
 
 @needs_html2blocks
@@ -205,7 +223,7 @@ def test_upload_tree_dry_run(invoke, site, tmp_path):
         f"{SITE_URL}/docs/sub",
         f"{SITE_URL}/docs/sub/a.txt",
     ]
-    assert {r.method for r in site.requests} <= {"GET"}
+    assert {r.method for r in site.sent} <= {"GET"}
 
 
 def test_block_types(invoke, site):

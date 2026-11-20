@@ -279,6 +279,38 @@ def test_blocks(invoke, site):
     ]
 
 
+def test_blocks_of_a_plate_document(invoke, site):
+    link = {"type": "a", "url": "/news", "children": [{"text": "news"}]}
+    teaser = {
+        "type": "ploneBlock",
+        "@type": "teaser",
+        "href": [{"@id": "/about"}],
+        "children": [{"text": ""}],
+    }
+    region = {
+        "@type": "plate",
+        "value": [
+            {"type": "title", "children": [{"text": "Wiki"}]},
+            {"type": "p", "children": [{"text": "Read the "}, link, {"text": "."}]},
+            teaser,
+        ],
+    }
+    site.add("GET", "/wiki", {**DOCUMENT, "blocks": {"main": region}})
+    run = invoke("blocks", "/wiki", "--links")
+    assert run.exit_code == 0, run.stderr
+    assert run.json == [
+        {
+            "id": "main",
+            "@type": "plate",
+            "nodes": [
+                {"type": "title", "text": "Wiki"},
+                {"type": "p", "text": "Read the news.", "links": ["/news"]},
+                {"type": "ploneBlock", "@type": "teaser", "links": ["/about"]},
+            ],
+        }
+    ]
+
+
 def test_resolve_uid(invoke, site):
     uid = DOCUMENT["UID"]
     site.add("GET", "/@search", {"items": [{**DOCUMENT}]})

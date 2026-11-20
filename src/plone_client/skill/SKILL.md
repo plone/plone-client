@@ -98,6 +98,8 @@ To write prose, use `create-page`.
 `create` adds a title block and a description block, unless given `--no-blocks` or `blocks` in the data.
 
 `update` with `blocks` replaces all of them.
+Some types, such as wiki pages, keep their whole text in one Plate document instead: `blocks["main"]`, or `blocks["__somersault__"]` on sites older than `@plone/plate` 1.0.0-alpha.27; `plone-client blocks` lists its nodes under it.
+`create-page` writes those on its own, and the block-editing tools refuse them; to change one, edit the nodes in its `value` and send the whole `blocks` back with `update`.
 Before you write or change blocks, read [references/blocks.md](references/blocks.md), or run `plone-client skill show references/blocks.md`.
 
 ## Site administration

@@ -71,7 +71,7 @@ def files(tmp_path):
 
 
 def _calls(site):
-    return [(r.method, site.site_path(r)) for r in site.requests]
+    return [(r.method, site.site_path(r)) for r in site.sent]
 
 
 class TestCreateWithFiles:
@@ -282,7 +282,7 @@ class TestCreatePage:
             publish="publish",
         )
         site = fake_create
-        body = json.loads(site.requests[0].content)
+        body = json.loads(site.sent[0].content)
         assert body["title"] == "Getting started"
         assert body["subjects"] == ["intro"]
         types = [body["blocks"][i]["@type"] for i in body["blocks_layout"]["items"]]
@@ -308,7 +308,7 @@ class TestCreatePage:
             title="Given",
             description="Short",
         )
-        body = fake_create.body(fake_create.requests[0])
+        body = fake_create.body(fake_create.sent[0])
         assert body["title"] == "Given"
         assert body["description"] == "Short"
         texts = [block.get("plaintext") for block in body["blocks"].values()]
@@ -380,7 +380,7 @@ class TestCreatePage:
                 "fields": {"preview_image_link": f"{SITE_URL}/docs/office/lead.png"},
             }
         ]
-        assert json.loads(site.requests[-1].content) == {
+        assert json.loads(site.sent[-1].content) == {
             "preview_image_link": "uid-lead.png"
         }
 
@@ -391,7 +391,7 @@ class TestCreatePage:
         result = operations.create_page(
             client, "/docs", "# Office\n\nText.", files=files[1:], lead_image=0
         )
-        assert site.body(site.requests[1])["image"]["filename"] == "photo.png"
+        assert site.body(site.sent[1])["image"]["filename"] == "photo.png"
         assert [entry["id"] for entry in result.created] == ["office", "doc.pdf"]
         assert result.changed == []
 
@@ -462,6 +462,153 @@ def test_slug(text, expected):
     assert operations.slug(text) == expected
 
 
+SCHEMA = "/Plone/@blocks-schema"
+PLATE = {"id": "plone.plate", "version": 1}
+
+
+@pytest.fixture
+def plate_site(site):
+    """The fake site, whose Volto says that pages are Plate documents."""
+    site.add("POST", "/@login", {"token": "jwt-token"})
+    site.add("GET", SCHEMA, {"items": [], "document_model": PLATE})
+    return site
+
+
+def _schema_lookups(site):
+    return [r for r in site.requests if r.url.path == SCHEMA]
+
+
+class TestDocumentModel:
+    def test_the_chosen_model_wins(self, client, site):
+        model = operations.resolve_document_model(client, "Document", "plone.plate")
+        assert model == "plone.plate"
+        assert site.requests == []
+
+    def test_an_unknown_chosen_model(self, client, site):
+        with pytest.raises(ValueError, match="Unknown document model 'slate'"):
+            operations.resolve_document_model(client, "Document", "slate")
+        assert site.requests == []
+
+    def test_the_site_says(self, client, plate_site):
+        assert operations.resolve_document_model(client, "WikiPage") == "plone.plate"
+        assert plate_site.params(_schema_lookups(plate_site)[0]) == [
+            ("type", "WikiPage")
+        ]
+
+    def test_the_site_wins_over_plate_types(self, client_factory, site):
+        site.add("POST", "/@login", {"token": "jwt-token"})
+        site.add("GET", SCHEMA, {"document_model": {"id": "plone.blocks"}})
+        client = client_factory(plate_types=["Document"])
+        assert operations.resolve_document_model(client, "Document") == "plone.blocks"
+
+    def test_a_model_plone_client_cannot_write(self, client, site):
+        site.add("POST", "/@login", {"token": "jwt-token"})
+        site.add("GET", SCHEMA, {"document_model": {"id": "acme.canvas"}})
+        with pytest.raises(ValueError, match=r"'acme\.canvas' document model"):
+            operations.resolve_document_model(client, "Board")
+
+    @pytest.mark.parametrize(
+        "portal_type,expected",
+        [("WikiPage", "plone.plate:somersault"), ("Document", "plone.blocks")],
+    )
+    def test_plate_types_when_the_site_does_not_say(
+        self, client_factory, site, portal_type, expected
+    ):
+        client = client_factory(plate_types=["WikiPage"])
+        assert operations.resolve_document_model(client, portal_type) == expected
+
+    @needs_html2blocks
+    def test_create_a_plate_page(self, client, plate_site):
+        site = plate_site
+        site.add("POST", "/wiki", {"@id": f"{SITE_URL}/wiki/notes"})
+        operations.create_page(
+            client,
+            "/wiki",
+            "# Notes\n\nSome *text*.\n",
+            portal_type="WikiPage",
+            description="Short",
+        )
+        body = site.body(site.sent[-1])
+        assert (body["title"], body["description"]) == ("Notes", "Short")
+        assert "blocks_layout" not in body
+        assert list(body["blocks"]) == ["main"]
+        region = body["blocks"]["main"]
+        assert region["@type"] == "plate"
+        assert [node["type"] for node in region["value"]] == ["title", "p"]
+        assert region["value"][0]["children"] == [{"text": "Notes"}]
+
+    @needs_html2blocks
+    def test_a_chosen_model_is_not_looked_up(self, client, site):
+        site.add("POST", "/wiki", {"@id": f"{SITE_URL}/wiki/notes"})
+        operations.create_page(
+            client, "/wiki", "# Notes\n\nText.\n", document_model="plone.plate"
+        )
+        assert _schema_lookups(site) == []
+        assert list(site.body()["blocks"]) == ["main"]
+
+    def test_title_is_checked_before_the_lookup(self, client, plate_site):
+        with pytest.raises(ValueError, match="A title is needed"):
+            operations.create_page(client, "/wiki", "Just text")
+        assert plate_site.requests == []
+
+    @needs_html2blocks
+    def test_plate_types_write_the_legacy_format(self, client_factory, site):
+        # a site that does not announce document models has an editor older
+        # than @plone/plate 1.0.0-alpha.27, which reads __somersault__ only
+        site.add("POST", "/wiki", {"@id": f"{SITE_URL}/wiki/notes"})
+        client = client_factory(plate_types=["WikiPage"])
+        operations.create_page(
+            client, "/wiki", "# Notes\n\nText.\n", portal_type="WikiPage"
+        )
+        body = site.body(site.sent[-1])
+        (title_id,) = body["blocks_layout"]["items"]
+        assert body["blocks"][title_id] == {"@type": "title"}
+        region = body["blocks"]["__somersault__"]
+        assert region["@type"] == "__somersault__"
+        assert [node["type"] for node in region["value"]] == ["title", "p"]
+        assert set(body["blocks"]) == {title_id, "__somersault__"}
+
+    def test_upload_legacy_folders(self, client_factory, fake_create, tmp_path):
+        (tmp_path / "one").mkdir()
+        client = client_factory(plate_types=["WikiPage"])
+        operations.upload_tree(client, tmp_path, "/wiki", folder_type="WikiPage")
+        body = fake_create.body(fake_create.sent[-1])
+        assert body["blocks"]["__somersault__"]["value"] == [
+            {"type": "title", "children": [{"text": "one"}]}
+        ]
+        assert len(body["blocks_layout"]["items"]) == 1
+
+    def test_upload_folders_as_plate_pages(self, client, fake_create, tmp_path):
+        site = fake_create
+        site.add("POST", "/@login", {"token": "jwt-token"})
+        site.add("GET", SCHEMA, {"items": [], "document_model": PLATE})
+        (tmp_path / "one").mkdir()
+        (tmp_path / "two").mkdir()
+        operations.upload_tree(client, tmp_path, "/wiki", folder_type="WikiPage")
+        assert len(_schema_lookups(site)) == 1
+        one, two = (site.body(r) for r in site.sent[1:])
+        assert one["blocks"] == {
+            "main": {
+                "@type": "plate",
+                "value": [{"type": "title", "children": [{"text": "one"}]}],
+            }
+        }
+        assert "blocks_layout" not in two
+
+    @needs_html2blocks
+    def test_upload_pages_as_plate_documents(self, client, fake_create, tree):
+        site = fake_create
+        site.add("POST", "/@login", {"token": "jwt-token"})
+        site.add("GET", SCHEMA, {"items": [], "document_model": PLATE})
+        operations.upload_tree(client, tree, "/wiki", convert_pages=True)
+        # folders and pages are both Documents: one lookup
+        assert len(_schema_lookups(site)) == 1
+        about, guides = (site.body(r) for r in site.sent[1:3])
+        for page, title in ((about, "About us"), (guides, "The guides")):
+            nodes = page["blocks"]["main"]["value"]
+            assert nodes[0] == {"type": "title", "children": [{"text": title}]}
+
+
 @pytest.fixture
 def tree(tmp_path):
     """A local folder to upload."""
@@ -488,7 +635,7 @@ class TestUploadTree:
             ("POST", "/docs/guides"),
             ("POST", "/docs/guides"),
         ]
-        about, guides = (site.body(r) for r in site.requests[1:3])
+        about, guides = (site.body(r) for r in site.sent[1:3])
         assert about["@type"] == "File"
         assert guides["@type"] == "Document"
         assert guides["title"] == "Guides"
@@ -505,7 +652,7 @@ class TestUploadTree:
     def test_convert_pages(self, client, fake_create, tree):
         site = fake_create
         operations.upload_tree(client, tree, "/docs", convert_pages=True)
-        about, guides, photo = (site.body(r) for r in site.requests[1:])
+        about, guides, photo = (site.body(r) for r in site.sent[1:])
         assert (about["@type"], about["id"], about["title"]) == (
             "Document",
             "about",
@@ -562,7 +709,7 @@ class TestUploadTree:
     def test_dry_run(self, client_factory, site, tree):
         client = client_factory(dry_run=True)
         result = operations.upload_tree(client, tree, "/docs")
-        assert {r.method for r in site.requests} == {"GET"}
+        assert {r.method for r in site.sent} == {"GET"}
         assert [entry["@id"] for entry in result.created] == [
             f"{SITE_URL}/docs/about.md",
             f"{SITE_URL}/docs/guides",
@@ -742,6 +889,24 @@ class TestAddBlocks:
         with pytest.raises(ValueError, match="/file has no blocks"):
             operations.add_blocks(client, "/file", [{"@type": "slate"}])
         assert _calls(site) == [("GET", "/file")]
+
+    @pytest.mark.parametrize(
+        "region_id,region_type",
+        [("main", "plate"), ("__somersault__", "__somersault__")],
+    )
+    def test_plate_document_is_refused(self, client, site, region_id, region_type):
+        wiki = {
+            "@id": f"{SITE_URL}/wiki",
+            "blocks": {
+                "t": {"@type": "title"},
+                region_id: {"@type": region_type, "value": []},
+            },
+            "blocks_layout": {"items": ["t"]},
+        }
+        site.add("GET", "/wiki", wiki)
+        with pytest.raises(ValueError, match=f"one Plate document \\({region_id}\\)"):
+            operations.add_blocks(client, "/wiki", [{"@type": "slate"}])
+        assert _calls(site) == [("GET", "/wiki")]
 
     def test_dry_run(self, client_factory, page):
         client = client_factory(dry_run=True)

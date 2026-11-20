@@ -382,7 +382,11 @@ def blocks(
         bool, typer.Option("--links", help="List the links found in each block.")
     ] = False,
 ) -> None:
-    """Summarize the blocks of an item, nested ones included."""
+    """Summarize the blocks of an item, nested ones included.
+
+    A Plate document, such as the text of a wiki page, is one block whose
+    nodes are listed under it.
+    """
     client = get_state(ctx).client
     item = client.content.get(ref, include_items=False)
     rows = []
@@ -393,7 +397,9 @@ def blocks(
         text = block.get("plaintext")
         if text:
             row["text"] = text[:120]
-        if links:
+        if blocks_helpers.is_region(block):
+            row["nodes"] = blocks_helpers.plate_outline(block, width=120, links=links)
+        elif links:
             found = list(blocks_helpers.iter_links(block))
             if found:
                 row["links"] = found

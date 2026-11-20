@@ -57,6 +57,12 @@ def test_add_with_blocks_setting(invoke, memory_keyring, config_file):
     assert "Setting of block type codeBlock" in run.error["message"]
 
 
+def test_add_with_plate_types(invoke, memory_keyring, config_file, site):
+    run = _add(invoke, "wiki", "--plate-type", "WikiPage", "--plate-type", "Note")
+    assert run.exit_code == 0, run.stderr
+    assert run.json["plate_types"] == ["WikiPage", "Note"]
+
+
 def test_add_with_transitions(invoke, memory_keyring, config_file, site):
     run = _add(invoke, "blog", "--transition", "submit", "--transition", "retract")
     assert run.exit_code == 0, run.stderr
