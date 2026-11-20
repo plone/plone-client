@@ -29,7 +29,7 @@ from .exceptions import PloneTransitionError
 from .managers.files import file_data
 
 
-__version__ = "1.0.0a5"
+__version__ = "1.0.0a6.dev0"
 
 __all__ = [
     "JWTAuth",
