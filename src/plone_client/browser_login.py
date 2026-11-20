@@ -32,6 +32,7 @@ from urllib.parse import urlencode
 
 import logging
 import secrets
+import threading
 import time
 import webbrowser
 
@@ -143,8 +144,86 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self.server.token = token
         self._answer(
-            200, "You are logged in. Close this tab and go back to the terminal."
+            200,
+            "You are logged in. Close this tab and go back to plone-client, "
+            "in the terminal or your assistant.",
         )
+
+
+class PendingLogin:
+    """A browser login whose listener waits in a background thread.
+
+    The listener starts at once, so ``url`` can be shown to the user while
+    the caller does something else, such as answering an MCP tool call.
+
+    :param site_url: URL of the site's frontend, whose ``/login`` page runs
+        the login.
+    :param port: Port of the listener on ``127.0.0.1``; ``0`` picks a free one.
+    :param timeout: Seconds the listener waits for the login.
+    :raises PloneConfigurationError: If the port cannot be used.
+    """
+
+    #: Longest a listener waits for one request, so it notices a cancel.
+    TICK = 0.5
+
+    def __init__(
+        self, site_url: str, *, port: int = 0, timeout: float = DEFAULT_TIMEOUT
+    ) -> None:
+        state = secrets.token_urlsafe(32)
+        try:
+            self._server = _Server(port, state)
+        except OSError as exc:
+            raise PloneConfigurationError(
+                f"Cannot listen on 127.0.0.1:{port}: {exc.strerror or exc}"
+            ) from exc
+        listener = f"http://127.0.0.1:{self._server.server_address[1]}{CALLBACK_PATH}"
+        self.url = login_url(site_url, listener, state)
+        self.timeout = timeout
+        #: The token, once the site has handed it over.
+        self.token = ""
+        #: Why the login ended without a token, once it has.
+        self.error = ""
+        self._deadline = time.monotonic() + timeout
+        self._done = threading.Event()
+        threading.Thread(target=self._listen, daemon=True).start()
+
+    def _listen(self) -> None:
+        """Answer requests until the token arrives or the time is up."""
+        try:
+            while not self._server.token:
+                remaining = self._deadline - time.monotonic()
+                if remaining <= 0:
+                    self.error = (
+                        f"No login arrived within {self.timeout:g} seconds; the "
+                        "site's frontend must support a loopback return_url"
+                    )
+                    return
+                self._server.timeout = min(remaining, self.TICK)
+                self._server.handle_request()
+            self.token = self._server.token
+        finally:
+            self._server.server_close()
+            self._done.set()
+
+    @property
+    def done(self) -> bool:
+        """Whether the login has ended, with a token or an error."""
+        return self._done.is_set()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Wait for the login to end.
+
+        :param timeout: Seconds to wait; ``None`` until it ends.
+        :returns: Whether it has ended.
+        """
+        return self._done.wait(timeout)
+
+    def cancel(self) -> None:
+        """Stop listening; the login ends with an error."""
+        self._deadline = 0.0
+        self.wait()
+        if not self.token:
+            self.error = "The login was cancelled"
 
 
 def browser_login(
@@ -169,28 +248,12 @@ def browser_login(
     :raises PloneConfigurationError: If the port cannot be used, or no login
         arrives in time.
     """
-    state = secrets.token_urlsafe(32)
-    try:
-        server = _Server(port, state)
-    except OSError as exc:
-        raise PloneConfigurationError(
-            f"Cannot listen on 127.0.0.1:{port}: {exc.strerror or exc}"
-        ) from exc
-    with server:
-        listener = f"http://127.0.0.1:{server.server_address[1]}{CALLBACK_PATH}"
-        url = login_url(site_url, listener, state)
-        if announce is not None:
-            announce(url)
-        if open_browser:
-            webbrowser.open(url)
-        deadline = time.monotonic() + timeout
-        while not server.token:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise PloneConfigurationError(
-                    f"No login arrived within {timeout:g} seconds; the site's "
-                    "frontend must support a loopback return_url"
-                )
-            server.timeout = remaining
-            server.handle_request()
-        return server.token
+    pending = PendingLogin(site_url, port=port, timeout=timeout)
+    if announce is not None:
+        announce(pending.url)
+    if open_browser:
+        webbrowser.open(pending.url)
+    pending.wait()
+    if not pending.token:
+        raise PloneConfigurationError(pending.error)
+    return pending.token

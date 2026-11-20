@@ -189,3 +189,22 @@ def test_the_browser_is_not_opened_by_default(monkeypatch):
         browser_login.browser_login(SITE, announce=frontend, timeout=5) == "the-token"
     )
     assert opened == []
+
+
+def test_a_pending_login_waits_in_the_background():
+    pending = browser_login.PendingLogin(SITE, timeout=5)
+    assert pending.url.startswith(f"{SITE}/login?")
+    assert not pending.done
+    frontend = Frontend(post("the-token"))
+    frontend(pending.url)
+    assert pending.wait(5)
+    assert pending.token == "the-token"
+    assert pending.error == ""
+
+
+def test_a_pending_login_can_be_cancelled():
+    pending = browser_login.PendingLogin(SITE, timeout=60)
+    pending.cancel()
+    assert pending.done
+    assert pending.token == ""
+    assert pending.error == "The login was cancelled"

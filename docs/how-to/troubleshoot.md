@@ -388,14 +388,15 @@ The site then answers `401`, or as anonymous, and `plone-client -v info` logs th
 WARNING The token expired at 2026-11-21T09:12:45+00:00; log in again to get a new one
 ```
 
-Log in to the site with a browser, copy the new token, and store it with `plone-client login NAME`; see {ref}`howto-profiles`.
+Log in to the site with a browser, copy the new token, and store it with `plone-client login NAME`, or run `plone-client login NAME --browser`; see {ref}`howto-profiles`.
+In an assistant, ask it to log in again: the MCP server's `login` tool gives a URL to open; see {ref}`reference-assistant-server-login`.
 `info` and `profile test` print `token_expires`, so you can see the next expiry.
 
 ## The browser login ends with `No login arrived`
 
-Applies to the command line.
+Applies to the command line and the MCP server.
 
-`plone-client login NAME --browser` waited, and the site never sent the token.
+`plone-client login NAME --browser`, or the MCP server's `login` tool, waited, and the site never sent the token.
 The site's frontend may not support a loopback `return_url` yet: it then logs you in and stays on the site.
 The browser may also run on another machine than the command, which the handoff cannot reach.
 Copy the token and run `plone-client login NAME` without `--browser`; see {ref}`howto-profiles`.

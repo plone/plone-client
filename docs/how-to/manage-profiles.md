@@ -113,6 +113,7 @@ The site then sends the token to the waiting command, which checks and stores it
 For a profile whose `url` is the backend, the page comes from `frontend_url`.
 If the browser runs on another machine, the handoff cannot reach the command, so copy the token instead.
 The command gives up after `--timeout` seconds, 300 by default, and `--port` chooses the port to wait on.
+The MCP server offers the same login as its `login` tool, so an assistant can renew a login that expired; see {ref}`reference-assistant-server-login`.
 
 ```{note}
 Only a token kept in the keyring is written back.
