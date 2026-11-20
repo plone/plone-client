@@ -106,7 +106,7 @@ When one of them stops part way, the error on standard error also has a `result`
 | Command | Does |
 |---|---|
 | {ref}`info <cli-info>` | Show the {term}`profile`, site, and user the command line connects with, and the Plone version. If the site rejected the profile's credentials, the output has `credentials_rejected: true` and a `message` that names the fix, and the exit code is 4. |
-| {ref}`profile <cli-profile>` | `list`, `show` / `add`, `use`, `defaults`, `remove` / `set-secret`, `test`: manage connection profiles. |
+| {ref}`profile <cli-profile>` | `list`, `show` / `add`, `set` / `unset`, `use`, `defaults`, `remove` / `set-secret`, `test`: manage connection profiles. |
 | {ref}`profile groups <cli-profile-groups>` | `groups` / `group-set`, `group-remove`: list, create or replace, and remove groups of profiles; see {ref}`reference-configuration-groups`. |
 | {ref}`skill <cli-skill>` | `show` / `install`: print the agent {term}`skill`, or install it. |
 
