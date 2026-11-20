@@ -9,6 +9,33 @@
 
 <!-- towncrier release notes start -->
 
+## 1.0.0a5 (2026-11-20)
+
+
+### New features:
+
+- A token profile now renews its JWT with `@login-renew` before it expires, an hour ahead by default (`renew_margin`, `--renew-margin`, `PLONE_CLIENT_RENEW_MARGIN`), and keeps the new token in the keyring. The new `plone-client login NAME` command stores a token copied from a browser, and `info` and `profile test` print when it expires. @ericof [#39](https://github.com/plone/plone-client/issues/39)
+- `plone-client login NAME --browser` prints the URL of the site's login page, to open in the browser you log in with (or opens it with `--open`), and waits on `127.0.0.1` for the token, which the site's frontend hands over once the user allows it, for sites whose people log in through another provider. The MCP server offers the same login as a `login` tool, so an assistant can renew an expired login: it gives the URL to open, then stores the token. It needs a frontend that supports a loopback `return_url`, such as volto-authomatic once collective/volto-authomatic#50 is released. @ericof [#40](https://github.com/plone/plone-client/issues/40)
+- `create-page` and `upload-tree` write the pages of content types that keep one Plate document, such as the wiki pages of `volto-plate`, as that document instead of separate blocks. The site says which types those are, through `@blocks-schema` in Volto 19.8 and later; for older sites, list them in the profile's new `plate_types` setting, which writes the `__somersault__` format their editors read, or choose the model for one call with `--document-model` (`document_model` in Python and in the MCP tools). Needs `collective.html2blocks` 1.0.0b3 or later. `plone-client blocks` and the MCP `list_blocks` tool list the nodes of a Plate document, with their links. The block tools now refuse such pages instead of breaking them, and `tidy()` no longer adds a Plate document to `blocks_layout`. @ericof [#42](https://github.com/plone/plone-client/issues/42)
+- A dry run now warns when the blocks of an item have the wrong shape, and when a new item has fields its type does not have, which the site would ignore. @ericof 
+- A profile, a client, or `PLONE_CLIENT_TRANSITIONS` can list the only workflow transitions to run, such as `submit`; the others are refused before they are sent, with exit code 7, also by the MCP server and `call_service`. @ericof 
+
+
+### Bug fixes:
+
+- Fixed `users.list` and `plone-client users list` on Plone 6.2, where `plone.restapi` 10 answers `@users` with an object instead of a list. @ericof 
+- `create_content_with_files` and `operations.create_with_files` now take `blocks` as a list, as the other tools do, instead of sending it to the site, which refused it. @ericof 
+
+
+### Internal:
+
+- Added a Read the Docs configuration that builds a preview of the documentation for each pull request; the published documentation stays on GitHub Pages. @ericof 
+
+
+### Documentation:
+
+- Polished the documentation: the landing page now says plone-client is in alpha, shows `pip` and `pipx` next to `uv`, and has a Python example that runs without a profile; each path ends with a checklist for connecting a real site; the safety page has a table of which layer enforces what; the MCP reference has an HTTP deployment checklist; the install page lists the Python version each extra needs; the editorial tutorial shows a real assistant session; and the compatibility page lists how Plone 6.0 answers differently from the examples. @ericof 
+
 ## 1.0.0a4 (2026-11-01)
 
 
