@@ -5,6 +5,7 @@ from ..client import PloneClient
 from ..exceptions import PloneAPIError
 from ..exceptions import PloneConfigurationError
 from ..profiles import AUTH_VALUES
+from ..profiles import Config
 from ..profiles import DEFAULT_KEYS
 from ..profiles import parse_verify
 from ..profiles import Profile
@@ -12,9 +13,11 @@ from ..profiles import SECRET_VALUES
 from ..tokens import expiry
 from . import panels
 from .output import emit
+from .output import parse_assignments
 from .output import parse_value
 from .output import PloneGroup
 from .state import get_state
+from dataclasses import fields
 from typing import Annotated
 from typing import Any
 
@@ -341,6 +344,161 @@ def defaults(
         config.set_defaults(values)
         config.save()
     emit(ctx, {"defaults": config.defaults, "config_file": str(config.path)})
+
+
+#: Settings that ``profile set`` and ``profile unset`` never change: the name,
+#: and how the secret is read, which the keyring entry depends on.
+PROTECTED_SETTINGS: dict[str, str] = {
+    "name": "The name of a profile cannot be changed; add the profile again "
+    "under the new name.",
+    "auth": "Changing the auth changes what the stored secret is; use "
+    "'profile add --replace' for that.",
+    "secret": "Changing where the secret is kept leaves the keyring entry "
+    "behind; use 'profile add --replace' for that.",
+}
+
+
+def _setting_key(key: str) -> str:
+    """Setting name as the configuration file spells it.
+
+    :param key: The name as typed, with ``-`` or ``_``.
+    :returns: The name with underscores.
+    """
+    return key.replace("-", "_")
+
+
+def _check_setting_keys(name: str, keys: list[str], refused: dict[str, str]) -> None:
+    """Refuse the settings that cannot be changed this way, or do not exist.
+
+    :param name: Profile name, for the messages.
+    :param keys: Setting names, with underscores.
+    :param refused: Setting names that are refused, with the reason.
+    :raises PloneConfigurationError: If a key is refused or unknown.
+    """
+    for key in keys:
+        if key in refused:
+            raise PloneConfigurationError(f"Profile {name!r}: {refused[key]}")
+    known = {f.name for f in fields(Profile)}
+    unknown = sorted(set(keys) - known)
+    if unknown:
+        raise PloneConfigurationError(
+            f"Profile {name!r}: unknown keys {', '.join(unknown)}"
+        )
+
+
+def _check_setting_type(name: str, key: str, value: Any, baseline: Profile) -> None:
+    """Refuse a value of the wrong kind for its setting.
+
+    :param name: Profile name, for the message.
+    :param key: Setting name.
+    :param value: The new value.
+    :param baseline: A profile with the class defaults, for the kind.
+    :raises PloneConfigurationError: If the value is of another kind.
+    """
+    default = getattr(baseline, key)
+    if key == "verify":
+        valid = isinstance(value, bool | str)
+        kind = "true, false or a CA bundle path"
+    elif isinstance(default, bool):
+        valid = isinstance(value, bool)
+        kind = "true or false"
+    elif isinstance(default, int | float):
+        valid = isinstance(value, int | float) and not isinstance(value, bool)
+        kind = "a number"
+    elif isinstance(default, str):
+        valid = isinstance(value, str)
+        kind = "a string"
+    else:
+        valid = isinstance(value, type(default))
+        kind = f"a JSON {type(default).__name__}"
+    if not valid:
+        raise PloneConfigurationError(f"Profile {name!r}: {key} must be {kind}")
+
+
+def _changed_profile(
+    config: Config,
+    name: str,
+    values: dict[str, Any],
+    unset: list[str] | None = None,
+) -> Profile:
+    """The profile with some settings changed, checked as any profile is.
+
+    Settings the profile takes from the defaults stay out of its own table.
+    Nothing is written here: the caller saves the configuration when this
+    returns.
+
+    :param config: The configuration.
+    :param name: Profile name.
+    :param values: Settings to set.
+    :param unset: Settings to remove, so that they return to the defaults.
+    :returns: The new profile.
+    :raises PloneConfigurationError: If a setting is refused, unknown, of the
+        wrong kind, or its value is invalid.
+    """
+    profile = config.get(name)
+    baseline = Profile(name=name, url=profile.url)
+    own = profile.to_mapping(config.defaults)
+    for key in unset or []:
+        own.pop(key, None)
+    for key, value in values.items():
+        _check_setting_type(name, key, value, baseline)
+    own.update(values)
+    return Profile.from_mapping(name, {**config.defaults, **own})
+
+
+@app.command("set", rich_help_panel=panels.WRITE)
+def set_settings(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Profile name.")],
+    assignments: Annotated[
+        list[str],
+        typer.Argument(
+            metavar="KEY=VALUE...",
+            help="key=text for a string, key:=json for any other value, such as "
+            "'plate_types:=[\"WikiPage\"]' or 'read_only:=true'.",
+        ),
+    ],
+) -> None:
+    """Change some settings of a profile; the others, and its secret, stay.
+
+    The new profile is checked like any profile before the configuration file
+    is written: an unknown key, a value of the wrong kind or an invalid value
+    is refused, and the file stays as it was.
+    """
+    config = get_state(ctx).config
+    try:
+        parsed = parse_assignments(assignments)
+    except ValueError as error:
+        raise PloneConfigurationError(str(error)) from None
+    values = {_setting_key(key): value for key, value in parsed.items()}
+    _check_setting_keys(name, list(values), PROTECTED_SETTINGS)
+    profile = _changed_profile(config, name, values)
+    config.add(profile, replace=True)
+    config.save()
+    emit(ctx, {**profile.summary(), "changed": sorted(values)})
+
+
+@app.command("unset", rich_help_panel=panels.WRITE)
+def unset_settings(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Profile name.")],
+    keys: Annotated[
+        list[str],
+        typer.Argument(
+            metavar="KEY...",
+            help="Settings to remove; each returns to the defaults' value.",
+        ),
+    ],
+) -> None:
+    """Remove some settings of a profile, so that they return to the defaults."""
+    config = get_state(ctx).config
+    names = [_setting_key(key) for key in keys]
+    refused = {**PROTECTED_SETTINGS, "url": "The URL of a profile cannot be unset."}
+    _check_setting_keys(name, names, refused)
+    profile = _changed_profile(config, name, {}, unset=names)
+    config.add(profile, replace=True)
+    config.save()
+    emit(ctx, {**profile.summary(), "unset": sorted(names)})
 
 
 @app.command("set-secret", rich_help_panel=panels.CONNECTION)

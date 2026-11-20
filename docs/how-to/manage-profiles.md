@@ -27,7 +27,18 @@ To refuse every change to a site, add `--read-only`.
 plone-client profile add prod --url https://example.org --username editor --read-only
 ```
 
-To make an existing profile read-only, set `read_only = true` in its table of the configuration file; see {ref}`reference-configuration`.
+To change one setting of an existing profile, use `profile set`.
+It changes only the settings you name, so the secret and the other settings stay as they are, and `profile add --replace` is not needed.
+Use `key=text` for a string and `key:=json` for any other value.
+
+```shell
+plone-client profile set prod read_only:=true 'transitions:=["submit"]'
+```
+
+The new profile is checked before the file is written: an unknown key, a value of the wrong kind or an invalid value is refused, and the file stays as it was.
+The name, `auth` and `secret` cannot be changed this way; `profile add --replace` changes them.
+`profile unset prod transitions` returns a setting to the defaults' value.
+The configuration itself is described in {ref}`reference-configuration`.
 
 To pass the password from a script instead of typing it, use `--password-stdin`.
 

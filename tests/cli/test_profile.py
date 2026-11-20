@@ -280,3 +280,163 @@ def test_test_command_anonymous_profile_is_not_a_rejection(invoke, site):
     assert run.json["authenticated"] is False
     assert run.json["credentials_rejected"] is False
     assert "message" not in run.json
+
+
+def test_set_changes_given_settings_only(invoke, memory_keyring, config_file):
+    _add(invoke, "intranet", "--description", "Old", "--transition", "submit")
+    secret_before = dict(memory_keyring.store)
+    run = invoke(
+        "profile",
+        "set",
+        "intranet",
+        "description=New text",
+        'plate_types:=["WikiPage"]',
+        "read_only:=true",
+        "url=https://other.example.org/",
+    )
+    assert run.exit_code == 0, run.stderr
+    assert run.json["url"] == "https://other.example.org"
+    assert run.json["description"] == "New text"
+    assert run.json["plate_types"] == ["WikiPage"]
+    assert run.json["read_only"] is True
+    assert run.json["transitions"] == ["submit"]
+    assert run.json["changed"] == ["description", "plate_types", "read_only", "url"]
+    assert memory_keyring.store == secret_before
+    profile = load_config(config_file).get("intranet")
+    assert profile.username == "editor"
+    assert profile.plate_types == ["WikiPage"]
+    assert "s3cret" not in config_file.read_text()
+    assert load_config(config_file).current == "intranet"
+
+
+def test_set_json_lists_and_objects(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    run = invoke(
+        "profile",
+        "set",
+        "blog",
+        'transitions:=["submit", "retract"]',
+        'blocks:={"codeBlock": true}',
+        "timeout:=60",
+        "verify:=false",
+    )
+    assert run.exit_code == 0, run.stderr
+    profile = load_config(config_file).get("blog")
+    assert profile.transitions == ["submit", "retract"]
+    assert profile.blocks == {"codeBlock": True}
+    assert profile.timeout == 60.0
+    assert profile.verify is False
+
+
+def test_set_leaves_out_values_equal_to_defaults(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    invoke("profile", "defaults", "--timeout", "60")
+    run = invoke("profile", "set", "blog", "timeout:=60")
+    assert run.exit_code == 0, run.stderr
+    assert "timeout" not in load_config(config_file).to_mapping()["profiles"]["blog"]
+    assert invoke("profile", "show", "blog").json["timeout"] == 60.0
+    assert invoke("profile", "set", "blog", "timeout:=90").exit_code == 0
+    assert load_config(config_file).get("blog").timeout == 90.0
+    assert "timeout" in load_config(config_file).to_mapping()["profiles"]["blog"]
+
+
+def test_set_refuses_unknown_key_and_keeps_file(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    text = config_file.read_text()
+    run = invoke("profile", "set", "blog", "colour=blue")
+    assert run.exit_code == 3
+    assert "unknown keys colour" in run.error["message"]
+    assert config_file.read_text() == text
+
+
+def test_set_refuses_invalid_value_and_keeps_file(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    text = config_file.read_text()
+    for assignment, message in (
+        ("timeout:=0", "timeout must be positive"),
+        ("retries:=-1", "retries must be positive"),
+        ("plate_types:=[1]", "plate_types must be a list of type ids"),
+        ('blocks:={"codeBlock": "yes"}', "Setting of block type codeBlock"),
+        ("verify:=", "Not valid JSON"),
+    ):
+        run = invoke("profile", "set", "blog", assignment)
+        assert run.exit_code == 3, assignment
+        assert message in run.error["message"], assignment
+        assert config_file.read_text() == text, assignment
+
+
+def test_set_refuses_value_of_wrong_kind(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    text = config_file.read_text()
+    for assignment, message in (
+        ('read_only:="yes"', "read_only must be true or false"),
+        ('timeout:="60"', "timeout must be a number"),
+        ('transitions:="submit"', "transitions must be a JSON list"),
+        ("frontend_url:=5", "frontend_url must be a string"),
+    ):
+        run = invoke("profile", "set", "blog", assignment)
+        assert run.exit_code == 3, assignment
+        assert message in run.error["message"], assignment
+        assert config_file.read_text() == text, assignment
+
+
+def test_set_refuses_name_auth_and_secret(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    text = config_file.read_text()
+    secret_before = dict(memory_keyring.store)
+    for assignment, message in (
+        ("name=other", "cannot be changed"),
+        ("auth=token", "Changing the auth"),
+        ("secret=env", "Changing where the secret is kept"),
+    ):
+        run = invoke("profile", "set", "blog", assignment)
+        assert run.exit_code == 3, assignment
+        assert message in run.error["message"], assignment
+        assert config_file.read_text() == text, assignment
+    assert memory_keyring.store == secret_before
+
+
+def test_set_errors(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    run = invoke("profile", "set", "nope", "read_only:=true")
+    assert run.exit_code == 3
+    assert "Unknown profile" in run.error["message"]
+    run = invoke("profile", "set", "blog", "read_only")
+    assert run.exit_code == 3
+    assert "Expected key=value or key:=json" in run.error["message"]
+
+
+def test_unset_returns_setting_to_defaults(invoke, memory_keyring, config_file):
+    _add(invoke, "slow", "--timeout", "120", "--description", "Slow one")
+    run = invoke("profile", "unset", "slow", "timeout")
+    assert run.exit_code == 0, run.stderr
+    assert "timeout" not in run.json  # equal to the class default, so left out
+    assert run.json["unset"] == ["timeout"]
+    assert run.json["description"] == "Slow one"
+    profile = load_config(config_file).get("slow")
+    assert profile.timeout == 30.0
+    assert profile.description == "Slow one"
+
+
+def test_unset_follows_defaults(invoke, memory_keyring, config_file):
+    _add(invoke, "slow", "--timeout", "120")
+    invoke("profile", "defaults", "--timeout", "45")
+    assert invoke("profile", "unset", "slow", "timeout-x").exit_code == 3
+    run = invoke("profile", "unset", "slow", "timeout")
+    assert run.exit_code == 0, run.stderr
+    assert load_config(config_file).get("slow").timeout == 45.0
+
+
+def test_unset_refuses_protected_and_unknown_keys(invoke, memory_keyring, config_file):
+    _add(invoke, "blog")
+    text = config_file.read_text()
+    for key, message in (
+        ("url", "cannot be unset"),
+        ("name", "cannot be changed"),
+        ("secret", "Changing where the secret is kept"),
+        ("colour", "unknown keys colour"),
+    ):
+        run = invoke("profile", "unset", "blog", key)
+        assert run.exit_code == 3, key
+        assert message in run.error["message"], key
+        assert config_file.read_text() == text, key

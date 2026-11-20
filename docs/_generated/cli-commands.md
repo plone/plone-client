@@ -371,7 +371,7 @@ Move an item within its folder.
 
 Manage connection profiles; secrets are kept in the system keyring.
 
-Subcommands: `add`, `defaults`, `group-remove`, `group-set`, `groups`, `list`, `remove`, `set-secret`, `show`, `test`, `use`.
+Subcommands: `add`, `defaults`, `group-remove`, `group-set`, `groups`, `list`, `remove`, `set`, `set-secret`, `show`, `test`, `unset`, `use`.
 
 (cli-profile-add)=
 
@@ -462,6 +462,17 @@ Remove a profile and its secret.
 | `name` | str | yes | — | Profile name. |
 | `--keep-secret`, `--no-keep-secret` | flag | no | — | Leave the secret in the keyring. |
 
+(cli-profile-set)=
+
+### `profile set`
+
+Change some settings of a profile; the others, and its secret, stay.
+
+| Argument or option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | str | yes | — | Profile name. |
+| `KEY=VALUE...` | str | yes | — | key=text for a string, key:=json for any other value, such as 'plate_types:=["WikiPage"]' or 'read_only:=true'. |
+
 (cli-profile-set-secret)=
 
 ### `profile set-secret`
@@ -492,6 +503,17 @@ Connect with a profile and report who the client is logged in as.
 | Argument or option | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `name` | str | no | — | Profile name; the current one by default. |
+
+(cli-profile-unset)=
+
+### `profile unset`
+
+Remove some settings of a profile, so that they return to the defaults.
+
+| Argument or option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | str | yes | — | Profile name. |
+| `KEY...` | str | yes | — | Settings to remove; each returns to the defaults' value. |
 
 (cli-profile-use)=
 

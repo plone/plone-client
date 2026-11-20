@@ -145,6 +145,9 @@ plate_types = ["WikiPage"]
 Writing Plate documents needs `collective.html2blocks` 1.0.0b3 or later.
 The block functions and MCP tools, such as `add_blocks` and `update_block`, refuse a page that is one Plate document; replace the whole document with `update_content`, or `plone-client update`, instead.
 
+To change one setting of a profile without editing the file, use `plone-client profile set NAME KEY=VALUE…`, and `profile unset NAME KEY…` to return a setting to the defaults' value.
+Both check the new profile like any other, refuse a file that would be invalid, and keep the secret and the other settings; see {ref}`howto-profiles`.
+
 ## Defaults
 
 The `defaults` table sets connection settings for every profile.
